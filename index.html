@@ -391,6 +391,22 @@
           </div>
         </div>
 
+        <!-- 今日の学習内容セクション -->
+        <div class="space-y-3">
+          <h2 class="text-base font-black tracking-wider text-slate-300 uppercase">📅 TODAY'S FOCUS / 今日の学習</h2>
+          <div id="today-logs-container" class="space-y-3">
+            <!-- JSでロード -->
+          </div>
+        </div>
+
+        <!-- 学習履歴セクション -->
+        <div class="space-y-3">
+          <h2 class="text-base font-black tracking-wider text-slate-300 uppercase">📜 STUDY LOGS / 学習履歴</h2>
+          <div id="study-logs-container" class="max-h-[300px] overflow-y-auto space-y-3 pr-1">
+            <!-- JSでロード -->
+          </div>
+        </div>
+
       </div>
 
       <!-- ================= 4. 設定タブ ================= -->
@@ -520,6 +536,31 @@
     </div>
   </div>
 
+  <!-- 初回名前設定モーダル -->
+  <div id="name-setup-modal" class="fixed inset-0 bg-cyberdark/90 backdrop-blur-md z-[60] flex items-center justify-center hidden opacity-0 transition-opacity duration-300">
+    <div class="glass-panel w-full max-w-sm rounded-3xl p-6 space-y-5 border border-white/10 shadow-glass text-center transform scale-95 transition-transform duration-300">
+      <div class="inline-flex p-3 rounded-full bg-cyan-500/10 text-cyan-400">
+        <i data-lucide="user" class="w-8 h-8"></i>
+      </div>
+      <div class="space-y-2">
+        <h3 class="text-lg font-black tracking-wider text-slate-200">プロフィールの設定</h3>
+        <p class="text-xs text-slate-400 leading-relaxed">
+          アプリで表示するあなたの名前を入力してください。<br>
+          この名前が友達追加用のID（日本語ID）としても使われます。
+        </p>
+      </div>
+      <div class="space-y-4">
+        <div>
+          <input type="text" id="setup-name-input" placeholder="名前（日本語もOK）を入力..." class="w-full glass-input rounded-xl px-4 py-3.5 text-sm text-center text-white focus:outline-none font-bold">
+          <p id="setup-name-error" class="text-[10px] text-rose-400 font-bold mt-1.5 hidden">名前を入力してください</p>
+        </div>
+        <button id="btn-save-setup-name" onclick="saveSetupName()" class="w-full bg-gradient-to-r from-cyan-400 to-purple-500 hover:brightness-110 text-white font-black py-4 rounded-xl transition shadow-neon-blue text-sm tracking-widest active:scale-95">
+          決定する
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- トースト通知 -->
   <div id="toast" class="fixed top-14 left-1/2 transform -translate-x-1/2 glass-panel border border-cyan-500/30 text-cyan-300 text-xs px-5 py-3 rounded-2xl shadow-neon-blue z-50 flex items-center space-x-2 hidden transition-all duration-300">
     <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400"></i>
@@ -641,6 +682,8 @@
       loadLocalState();
       applySettingsToTimer();
       syncSubjectDisplay();
+      renderStats();
+      if (typeof renderStudyLogsUI === 'function') renderStudyLogsUI();
 
       let redirectChecked = false;
       let authStateChecked = false;
@@ -708,10 +751,15 @@
           document.getElementById('profile-display-name').value = user.displayName || 'GUEST';
           document.getElementById('profile-uid-text').value = user.uid;
 
+          // 学習履歴の同期を最初に行う
+          await syncStudyLogsFromFirestore(user);
+
           // データベース初期同期
-          await syncUserProfile(user);
-          // リスナーを開始
-          startRealtimeSync(user);
+          const isSetupDone = await syncUserProfile(user);
+          if (isSetupDone) {
+            // リスナーを開始 (プロフィール登録が完了している場合のみ)
+            startRealtimeSync(user);
+          }
         } else {
           currentUser = null;
           loggedInUser = null;
@@ -786,42 +834,251 @@
     };
 
     // 4. データ同期システム（RULE 1 ＆ RULE 3 遵守）
-    async function syncUserProfile(user) {
-      // 認証ガード: ユーザーオブジェクトがない場合は早期リターンし、パーミッションエラーを防ぐ
-      if (!user) return;
-      
-      // 今日の累積学習時間を算出
-      const today = new Date().toISOString().split('T')[0];
-      const todayMinutes = localState.logs
-        .filter(log => log.date === today)
-        .reduce((sum, log) => sum + log.duration, 0);
+    let setupUserRef = null;
 
-      // 総勉強時間を算出
-      const totalMinutes = localState.logs.reduce((sum, log) => sum + log.duration, 0);
-
-      // RULE 1: /artifacts/{appId}/public/data/users/{userId} への格納
-      const profileDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
+    function openNameSetupModal(user) {
+      setupUserRef = user;
+      const modal = document.getElementById('name-setup-modal');
+      const input = document.getElementById('setup-name-input');
+      const error = document.getElementById('setup-name-error');
       
+      input.value = user.displayName || "";
+      error.classList.add('hidden');
+      
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        modal.querySelector('div').classList.remove('scale-95');
+      }, 50);
+    }
+
+    function closeNameSetupModal() {
+      const modal = document.getElementById('name-setup-modal');
+      modal.classList.add('opacity-0');
+      modal.querySelector('div').classList.add('scale-95');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 300);
+      setupUserRef = null;
+    }
+
+    // Easy IDが存在するかチェックするヘルパー
+    async function checkIfEasyIdExists(easyId) {
+      const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'easyIds', easyId);
       try {
-        const snap = await getDoc(profileDocRef);
-        let currentName = user.displayName || 'GUEST';
-        if (snap.exists() && snap.data().displayName) {
-          currentName = snap.data().displayName;
+        const snap = await getDoc(easyIdDocRef);
+        return snap.exists();
+      } catch (e) {
+        console.error("Error checking easyId uniqueness: ", e);
+        return false;
+      }
+    }
+
+    window.saveSetupName = async function() {
+      if (!setupUserRef) return;
+      const input = document.getElementById('setup-name-input');
+      const error = document.getElementById('setup-name-error');
+      const name = input.value.trim();
+      
+      if (!name) {
+        error.textContent = "名前を入力してください";
+        error.classList.remove('hidden');
+        return;
+      }
+
+      // ボタンを無効化
+      const btn = document.getElementById('btn-save-setup-name');
+      btn.disabled = true;
+      btn.textContent = "設定中...";
+
+      try {
+        const user = setupUserRef;
+        // 1. Easy IDの自動生成と重複チェック
+        let easyId = name;
+        let isUnique = false;
+        let attempts = 0;
+        
+        let baseName = name.replace(/#/g, '');
+
+        while (!isUnique && attempts < 10) {
+          let testId = baseName;
+          if (attempts > 0) {
+            const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+            testId = `${baseName}#${randomSuffix}`;
+          } else {
+            // 初回は名前そのものでテスト
+            const exists = await checkIfEasyIdExists(testId);
+            if (!exists) {
+              isUnique = true;
+              easyId = testId;
+              break;
+            }
+          }
+          
+          if (!isUnique) {
+            const exists = await checkIfEasyIdExists(testId);
+            if (!exists) {
+              isUnique = true;
+              easyId = testId;
+            }
+          }
+          attempts++;
         }
 
+        if (!isUnique) {
+          easyId = `${baseName}#${Math.floor(10000 + Math.random() * 90000)}`;
+        }
+
+        // 2. easyIds コレクションに登録
+        const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'easyIds', easyId);
+        await setDoc(easyIdDocRef, {
+          uid: user.uid,
+          displayName: name
+        });
+
+        // 3. ユーザープロフィールを更新
+        const profileDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
+        const totalMinutes = localState.logs.reduce((sum, log) => sum + log.duration, 0);
+        
         await setDoc(profileDocRef, {
           uid: user.uid,
-          displayName: currentName,
+          displayName: name,
+          easyId: easyId,
+          isProfileSetup: true,
           totalStudyMinutes: totalMinutes,
           isStudying: isRunning && isStudyMode,
           currentSubject: isRunning && isStudyMode ? timerSubject.value : '',
           lastActive: Date.now()
         }, { merge: true });
 
+        // 4. UIの更新
+        document.getElementById('user-display-name').textContent = name;
+        document.getElementById('profile-display-name').value = name;
+        document.getElementById('profile-uid-text').value = easyId;
+
+        showToast(`プロフィールを登録しました！ ID: ${easyId}`);
+        closeNameSetupModal();
+        
+        // リアルタイム同期を開始
+        startRealtimeSync(user);
+      } catch (err) {
+        console.error("Setup profile error: ", err);
+        error.textContent = "設定に失敗しました。もう一度お試しください。";
+        error.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "決定する";
+      }
+    };
+
+    // 4. データ同期システム（RULE 1 ＆ RULE 3 遵守）
+    async function syncUserProfile(user) {
+      if (!user) return false;
+      
+      const today = new Date().toISOString().split('T')[0];
+      const todayMinutes = localState.logs
+        .filter(log => log.date === today)
+        .reduce((sum, log) => sum + log.duration, 0);
+
+      const totalMinutes = localState.logs.reduce((sum, log) => sum + log.duration, 0);
+      const profileDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
+      
+      try {
+        const snap = await getDoc(profileDocRef);
+        let currentName = user.displayName || 'GUEST';
+        let easyId = '';
+        let isProfileSetup = false;
+
+        if (snap.exists()) {
+          const data = snap.data();
+          if (data.displayName) currentName = data.displayName;
+          if (data.easyId) easyId = data.easyId;
+          if (data.isProfileSetup) isProfileSetup = data.isProfileSetup;
+        }
+
+        // Googleログインで、まだプロフィール設定（名前決定）をしていない場合、モーダルを表示して処理を止める
+        if (!user.isAnonymous && !isProfileSetup) {
+          openNameSetupModal(user);
+          return false;
+        }
+
+        // アノニマス（ゲスト）でまだIDがない場合、仮のeasyIdを設定する（重複チェック付き）
+        if (user.isAnonymous && !easyId) {
+          easyId = `GUEST-${Math.floor(1000 + Math.random() * 9000)}`;
+          const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'easyIds', easyId);
+          await setDoc(easyIdDocRef, { uid: user.uid, displayName: currentName });
+        }
+
+        await setDoc(profileDocRef, {
+          uid: user.uid,
+          displayName: currentName,
+          easyId: easyId,
+          totalStudyMinutes: totalMinutes,
+          isStudying: isRunning && isStudyMode,
+          currentSubject: isRunning && isStudyMode ? timerSubject.value : '',
+          lastActive: Date.now(),
+          isProfileSetup: true
+        }, { merge: true });
+
         document.getElementById('user-display-name').textContent = currentName;
         document.getElementById('profile-display-name').value = currentName;
+        document.getElementById('profile-uid-text').value = easyId || user.uid;
+        return true;
       } catch (e) {
         console.error("Failed to sync profile document: ", e);
+        return false;
+      }
+    }
+
+    async function uploadLogsToFirestore() {
+      if (!currentUser) return;
+      const logsDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'study_logs');
+      try {
+        await setDoc(logsDocRef, { logs: localState.logs });
+      } catch (err) {
+        console.error("Failed to upload logs to Firestore: ", err);
+      }
+    }
+
+    async function syncStudyLogsFromFirestore(user) {
+      if (!user) return;
+      const logsDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'config', 'study_logs');
+      try {
+        const snap = await getDoc(logsDocRef);
+        if (snap.exists() && snap.data().logs) {
+          const cloudLogs = snap.data().logs;
+          
+          // マージ
+          const mergedLogsMap = new Map();
+          localState.logs.forEach(log => mergedLogsMap.set(log.id, log));
+          cloudLogs.forEach(log => mergedLogsMap.set(log.id, log));
+          
+          const mergedLogs = Array.from(mergedLogsMap.values());
+          // ソート (日付が新しい順、同じ日付ならtimestampが新しい順)
+          mergedLogs.sort((a, b) => {
+            const dateComp = b.date.localeCompare(a.date);
+            if (dateComp !== 0) return dateComp;
+            return (b.timestamp || 0) - (a.timestamp || 0);
+          });
+
+          localState.logs = mergedLogs;
+          saveLocalState();
+          
+          // マージした結果をクラウドに再度書き込む (ローカルのみにあったログを同期するため)
+          await setDoc(logsDocRef, { logs: localState.logs });
+        } else {
+          // クラウドにまだログがない場合、現在のローカルログをアップロード
+          if (localState.logs.length > 0) {
+            await setDoc(logsDocRef, { logs: localState.logs });
+          }
+        }
+        
+        // UI更新
+        updateHeaderProgress();
+        renderStats();
+        if (typeof renderStudyLogsUI === 'function') renderStudyLogsUI();
+      } catch (err) {
+        console.error("Failed to sync logs from Firestore: ", err);
       }
     }
 
@@ -895,16 +1152,31 @@
     // 5. 友達追加システム
     window.addFriendById = async function() {
       if (!currentUser) return;
-      const targetId = document.getElementById('friend-search-input').value.trim();
-      if (!targetId) return;
+      const inputId = document.getElementById('friend-search-input').value.trim();
+      if (!inputId) return;
 
-      if (targetId === currentUser.uid) {
+      let targetUid = inputId;
+      let targetDisplayName = '';
+
+      // 1. まずeasyIdsで逆引きを試みる
+      const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'easyIds', inputId);
+      try {
+        const easySnap = await getDoc(easyIdDocRef);
+        if (easySnap.exists()) {
+          targetUid = easySnap.data().uid;
+          targetDisplayName = easySnap.data().displayName;
+        }
+      } catch (err) {
+        console.error("Error looking up easyId: ", err);
+      }
+
+      if (targetUid === currentUser.uid) {
         showToast("自分を友達に登録することはできません。");
         return;
       }
 
-      // 存在確認
-      const targetProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetId);
+      // 2. 存在確認
+      const targetProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetUid);
       const snap = await getDoc(targetProfileRef);
       if (!snap.exists()) {
         showToast("ユーザーが見つかりません。IDを確認してください。");
@@ -912,13 +1184,13 @@
       }
 
       const targetData = snap.data();
-      if (friendsIdList.includes(targetId)) {
+      if (friendsIdList.includes(targetUid)) {
         showToast("すでに友達に追加されています。");
         return;
       }
 
       // 保存 (RULE 1)
-      const updatedList = [...friendsIdList, targetId];
+      const updatedList = [...friendsIdList, targetUid];
       const friendsDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'friends');
       await setDoc(friendsDocRef, { list: updatedList }, { merge: true });
 
@@ -1164,7 +1436,10 @@
         }
       });
 
-      if (tabId === 'leaderboard') renderLeaderboard();
+      if (tabId === 'leaderboard') {
+        renderLeaderboard();
+        renderStudyLogsUI();
+      }
       if (tabId === 'friends') renderFriendsList();
     };
 
@@ -1304,14 +1579,35 @@
         subject,
         duration: parseInt(duration),
         date: today,
-        memo: memo || `${subject}のセッション`
+        memo: memo || `${subject}のセッション`,
+        timestamp: Date.now()
       };
       
       localState.logs.unshift(newLog);
       saveLocalState();
       updateHeaderProgress();
       syncUserProfile(currentUser); // データベースの総計をアップロード
+      uploadLogsToFirestore(); // 学習履歴そのものをアップロード
+      renderStats();
+      renderStudyLogsUI();
     }
+
+    window.removeRecord = async function(id) {
+      if (!confirm("この学習記録を削除しますか？")) return;
+      
+      localState.logs = localState.logs.filter(log => log.id !== id);
+      saveLocalState();
+      updateHeaderProgress();
+      renderStats();
+      renderStudyLogsUI();
+      
+      // クラウド保存とプロフィールの同期
+      if (currentUser) {
+        await syncUserProfile(currentUser);
+        await uploadLogsToFirestore();
+      }
+      showToast("学習記録を削除しました");
+    };
 
     function updateHeaderProgress() {
       const today = new Date().toISOString().split('T')[0];
@@ -1368,6 +1664,148 @@
       const totalAllMinutes = localState.logs.reduce((sum, log) => sum + log.duration, 0);
       const avgDaily = Math.round(totalAllMinutes / totalDays);
       document.getElementById('stat-avg-daily').textContent = `${avgDaily} MIN`;
+    }
+
+    function renderStudyLogsUI() {
+      const today = new Date().toISOString().split('T')[0];
+      
+      // 1. 今日の学習内容のレンダリング
+      const todayContainer = document.getElementById('today-logs-container');
+      if (!todayContainer) return;
+      todayContainer.innerHTML = '';
+      
+      const todayLogs = localState.logs.filter(log => log.date === today);
+      
+      if (todayLogs.length === 0) {
+        todayContainer.innerHTML = `
+          <div class="glass-panel rounded-2xl py-6 text-center text-slate-500">
+            <i data-lucide="calendar" class="w-6 h-6 mx-auto mb-2 opacity-30 text-slate-400"></i>
+            <p class="text-xs font-bold uppercase">No Study Today</p>
+            <p class="text-[10px] text-slate-600 mt-1">タイマーで勉強を開始するか、手動で記録を追加しましょう！</p>
+          </div>
+        `;
+      } else {
+        // 科目ごとの集計
+        const subjectSummary = {};
+        todayLogs.forEach(log => {
+          subjectSummary[log.subject] = (subjectSummary[log.subject] || 0) + log.duration;
+        });
+
+        // 集計カード
+        const summaryCard = document.createElement('div');
+        summaryCard.className = 'glass-panel rounded-2xl p-4 shadow-glass space-y-3';
+        
+        let summaryHtml = `<div class="flex justify-between items-center border-b border-white/5 pb-2">
+          <span class="text-xs font-black text-slate-300 uppercase">科目別集計</span>
+          <span class="text-xs font-black text-cyan-400 font-mono">${todayLogs.reduce((sum, l) => sum + l.duration, 0)}分</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2 text-xs">`;
+        
+        Object.keys(subjectSummary).forEach(subject => {
+          let emoji = '✏️';
+          if (subject === '英語') emoji = '🇬🇧';
+          else if (subject === '数学') emoji = '📐';
+          else if (subject === '国語') emoji = '📚';
+          else if (subject === '理科') emoji = '🧪';
+          else if (subject === '社会') emoji = '🌍';
+          
+          summaryHtml += `
+            <div class="flex justify-between p-2 rounded-xl bg-white/5 border border-white/5">
+              <span class="text-slate-300 font-bold">${emoji} ${subject}</span>
+              <span class="text-cyan-400 font-black font-mono">${subjectSummary[subject]}分</span>
+            </div>
+          `;
+        });
+        summaryHtml += `</div>`;
+        summaryCard.innerHTML = summaryHtml;
+        todayContainer.appendChild(summaryCard);
+
+        // 個別ログカード
+        todayLogs.forEach(log => {
+          let emoji = '✏️';
+          if (log.subject === '英語') emoji = '🇬🇧';
+          else if (log.subject === '数学') emoji = '📐';
+          else if (log.subject === '国語') emoji = '📚';
+          else if (log.subject === '理科') emoji = '🧪';
+          else if (log.subject === '社会') emoji = '🌍';
+
+          const card = document.createElement('div');
+          card.className = 'glass-panel rounded-2xl p-4 flex justify-between items-center shadow-glass';
+          card.innerHTML = `
+            <div class="flex items-center space-x-3">
+              <div class="w-9 h-9 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center font-bold text-sm text-slate-300">
+                ${emoji}
+              </div>
+              <div>
+                <span class="font-bold text-xs text-slate-200 block">${log.subject}</span>
+                <span class="text-[9px] text-slate-500 font-bold block mt-0.5">${log.memo || '学習セッション'}</span>
+              </div>
+            </div>
+            <div class="flex items-center space-x-3">
+              <div class="text-right">
+                <span class="text-sm font-black text-cyan-400 font-mono">${log.duration}</span>
+                <span class="text-[9px] text-slate-400 font-bold">分</span>
+              </div>
+              <button onclick="removeRecord('${log.id}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition active:scale-90">
+                <i data-lucide="trash-2" class="w-4 h-4 flex-shrink-0"></i>
+              </button>
+            </div>
+          `;
+          todayContainer.appendChild(card);
+        });
+      }
+
+      // 2. 学習履歴のレンダリング
+      const historyContainer = document.getElementById('study-logs-container');
+      if (!historyContainer) return;
+      historyContainer.innerHTML = '';
+
+      if (localState.logs.length === 0) {
+        historyContainer.innerHTML = `
+          <div class="glass-panel rounded-2xl py-8 text-center text-slate-500">
+            <i data-lucide="history" class="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-400"></i>
+            <p class="text-xs font-bold uppercase">No Logs Available</p>
+            <p class="text-[10px] text-slate-600 mt-1">学習記録がありません。</p>
+          </div>
+        `;
+      } else {
+        localState.logs.forEach(log => {
+          let emoji = '✏️';
+          if (log.subject === '英語') emoji = '🇬🇧';
+          else if (log.subject === '数学') emoji = '📐';
+          else if (log.subject === '国語') emoji = '📚';
+          else if (log.subject === '理科') emoji = '🧪';
+          else if (log.subject === '社会') emoji = '🌍';
+
+          const card = document.createElement('div');
+          card.className = 'glass-panel rounded-2xl p-4 flex justify-between items-center shadow-glass';
+          card.innerHTML = `
+            <div class="flex items-center space-x-3">
+              <div class="w-9 h-9 rounded-xl bg-white/5 border border-white/5 flex items-center justify-center font-bold text-sm text-slate-300">
+                ${emoji}
+              </div>
+              <div>
+                <div class="flex items-center space-x-2">
+                  <span class="font-bold text-xs text-slate-200">${log.subject}</span>
+                  <span class="text-[8px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded">${log.date}</span>
+                </div>
+                <span class="text-[9px] text-slate-500 font-bold block mt-0.5">${log.memo || '学習セッション'}</span>
+              </div>
+            </div>
+            <div class="flex items-center space-x-3">
+              <div class="text-right">
+                <span class="text-sm font-black text-cyan-400 font-mono">${log.duration}</span>
+                <span class="text-[9px] text-slate-400 font-bold">分</span>
+              </div>
+              <button onclick="removeRecord('${log.id}')" class="w-8 h-8 rounded-lg bg-red-500/10 hover:bg-red-500/20 text-red-400 flex items-center justify-center transition active:scale-90">
+                <i data-lucide="trash-2" class="w-4 h-4 flex-shrink-0"></i>
+              </button>
+            </div>
+          `;
+          historyContainer.appendChild(card);
+        });
+      }
+      lucide.createIcons();
     }
 
     // プロフィール変更
