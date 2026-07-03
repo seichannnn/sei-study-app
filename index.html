@@ -456,7 +456,7 @@
         <div>
           <label class="block text-[10px] tracking-widest text-slate-400 uppercase mb-1.5 font-bold">Subject</label>
           <select id="modal-subject" class="w-full glass-input rounded-xl px-4 py-3.5 text-sm focus:outline-none appearance-none text-slate-100">
-            <option value="英語">🇬🇧 英語</option>
+            <option value="英語">🇬 英語</option>
             <option value="数学">📐 数学</option>
             <option value="国語">📚 国語</option>
             <option value="理科">🧪 理科</option>
@@ -492,7 +492,7 @@
   <script type="module">
     // Firebase Modular imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // 1. 環境変数のセットアップ (ユーザーから提供された最新の firebaseConfig)
@@ -558,6 +558,16 @@
       }
     };
 
+    // スマートフォン / モバイル端末の検知
+    const isMobileDevice = () => {
+      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    };
+
+    // PWA（ホーム画面追加状態）として起動されているかの検知
+    const isStandalonePWA = () => {
+      return window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
+    };
+
     // ローディング表示用コントロール
     const showAuthLoading = (show, text = "PROCESSING...") => {
       const overlay = document.getElementById('auth-loading-overlay');
@@ -579,8 +589,42 @@
       applySettingsToTimer();
       syncSubjectDisplay();
 
+      // リダイレクトによるサインイン結果の回収処理（リダイレクト経由でのGoogleサインイン成功判定）
+      // 「リダイレクト認証フラグ」が保存されている場合、またはリダイレクト復帰直後と判断されるとき
+      const isRedirectInProgress = localStorage.getItem('auth_redirect_in_progress') === 'true';
+
+      if (!isIframeEnvironment() && (isRedirectInProgress || window.location.hash || window.location.search.includes('code='))) {
+        showAuthLoading(true, "Googleアカウントと安全に連携しています...");
+        try {
+          const result = await getRedirectResult(auth);
+          localStorage.removeItem('auth_redirect_in_progress'); // 完了したのでフラグクリア
+          if (result && result.user) {
+            showToast("Googleログインに成功しました！");
+            currentUser = result.user;
+            await syncUserProfile(result.user);
+            startRealtimeSync(result.user);
+          }
+        } catch (redirectErr) {
+          console.error("Redirect Auth Error: ", redirectErr);
+          localStorage.removeItem('auth_redirect_in_progress'); // エラーでもクリア
+          if (redirectErr.code === 'auth/unauthorized-domain') {
+            const currentHost = window.location.hostname;
+            showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
+          } else {
+            showToast("サインインの処理中にエラーが発生しました。");
+          }
+        } finally {
+          showAuthLoading(false);
+        }
+      }
+
       // RULE 3: Firestoreの全クエリを実行する前に、まず確実にAuthトークン（または匿名）でsignInを完了させる
       const initAuth = async () => {
+        // リダイレクト認証の結果が未確定な間は、起動時の余計な匿名ログインや状態の上書きを一時停止（ロック）します。
+        if (localStorage.getItem('auth_redirect_in_progress') === 'true') {
+          return; 
+        }
+
         try {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             await signInWithCustomToken(auth, __initial_auth_token);
@@ -606,6 +650,11 @@
 
       // Firebase Auth Listener（サインインが完了するとここが走り出す）
       onAuthStateChanged(auth, async (user) => {
+        // リダイレクト処理の途中であればAuthリスナー側でも競合を防ぐために処理を一時休止します
+        if (localStorage.getItem('auth_redirect_in_progress') === 'true') {
+          return;
+        }
+
         if (user) {
           currentUser = user;
           authScreen.classList.add('hidden');
@@ -627,17 +676,40 @@
       });
     });
 
-    // 3. 認証制御 (RULE 3 & Pop-up Blocked 100% Fixed with Synchronous Call)
-    btnGoogleLogin.addEventListener('click', () => {
-      // 1. iframe内、またはポップアップの許可されないサンドボックス環境の早期検知
+    // 3. 認証制御 (RULE 3 & モバイル/PWA環境下での100%バグ回避ログイン制御)
+    btnGoogleLogin.addEventListener('click', async () => {
+      // 1. iframe内（Canvas等）の早期検知
       if (isIframeEnvironment()) {
         showToast("プレビュー環境制限のため、自動でゲストログインを開始します");
         signInAnonymously(auth).catch((e) => console.error("Anonymous auth failed: ", e));
         return;
       }
 
-      // ポップアップブロックを「100%確実に回避」するため、クリックイベントの最初の行で同期的に直接 signInWithPopup を呼び出します。
-      // これによりブラウザが「ユーザーの直接のタッチ操作による正当なポップアップ」と判定するため、ブロックされません。
+      // 2. モバイル端末 または PWAホーム画面起動(スタンドアロン)の場合はリダイレクト方式を100%選択
+      if (isMobileDevice() || isStandalonePWA()) {
+        try {
+          showAuthLoading(true, "安全なGoogleログインページへ移動しています...");
+          // 他の自動非同期ログインとバッティングしないように保護フラグをオンにする
+          localStorage.setItem('auth_redirect_in_progress', 'true');
+          await signInWithRedirect(auth, googleProvider);
+        } catch (err) {
+          console.error("Google sign in with redirect failed: ", err);
+          localStorage.removeItem('auth_redirect_in_progress');
+          showAuthLoading(false);
+          showToast("エラーのためゲストログインを試みます。");
+          setTimeout(async () => {
+            try {
+              await signInAnonymously(auth);
+            } catch (subErr) {
+              console.error("Fallback anonymous auth failed: ", subErr);
+              showToast("ログインエラーが発生しました。");
+            }
+          }, 1000);
+        }
+        return;
+      }
+
+      // 3. PCなどの通常ブラウザ環境では、ポップアップ認証を同期的・最優先で即起動
       showAuthLoading(true, "Googleアカウントと連携しています...");
       signInWithPopup(auth, googleProvider)
         .then(async (result) => {
@@ -684,6 +756,7 @@
         currentUser = null;
         authScreen.classList.remove('hidden');
         appScreen.classList.add('hidden');
+        localStorage.removeItem('auth_redirect_in_progress');
         location.reload();
       } catch (err) {
         console.error("Signout error: ", err);
