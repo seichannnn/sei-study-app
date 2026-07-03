@@ -107,29 +107,6 @@
       <p id="auth-loading-text" class="text-xs font-bold tracking-widest text-cyan-400 uppercase">PROCESSING...</p>
     </div>
 
-    <!-- ポップアップブロック警告モーダル -->
-    <div id="popup-blocked-modal" class="absolute inset-0 bg-cyberdark/90 backdrop-blur-md z-30 flex items-center justify-center hidden px-6">
-      <div class="glass-panel w-full max-w-sm rounded-3xl p-6 space-y-4 border border-rose-500/30 text-center shadow-glass">
-        <div class="inline-flex p-3 rounded-full bg-rose-500/10 text-rose-400">
-          <i data-lucide="lock" class="w-8 h-8 animate-bounce"></i>
-        </div>
-        <h3 class="text-lg font-black tracking-wider text-rose-400">ポップアップが制限されました</h3>
-        <p class="text-xs text-slate-300 leading-relaxed text-left">
-          お使いのブラウザによってGoogleのサインイン画面が自動的に閉じられました。<br><br>
-          <strong>解決方法:</strong><br>
-          ブラウザのアドレスバーの右端に表示されている「ポップアップブロック」のマークをクリックし、<strong>「StudyFlowでのポップアップを常に許可」</strong>を選択してもう一度お試しください。
-        </p>
-        <div class="space-y-2 pt-2">
-          <button onclick="closePopupBlockedModal()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl text-xs tracking-wider transition active:scale-95">
-            了解しました
-          </button>
-          <button onclick="loginAsGuestFromModal()" class="w-full bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold py-3 rounded-xl text-xs tracking-wider transition active:scale-95">
-            今回はゲストとしてログイン
-          </button>
-        </div>
-      </div>
-    </div>
-
     <div class="w-full max-w-sm text-center space-y-8 z-10">
       <div class="space-y-3">
         <div class="inline-flex p-4 rounded-3xl bg-white/5 border border-white/10 shadow-neon-blue">
@@ -143,8 +120,8 @@
 
       <!-- ログインオプション -->
       <div class="space-y-4">
-        <!-- Google認証ボタン -->
-        <button id="btn-google-login" class="w-full py-4 rounded-2xl bg-white text-gray-900 font-black flex items-center justify-center space-x-3 hover:bg-slate-100 transition duration-300 shadow-lg active:scale-95">
+        <!-- Google認証ボタン (インライン onclick でポップアップブロックを回避) -->
+        <button id="btn-google-login" onclick="window.startGoogleLogin(event)" class="w-full py-4 rounded-2xl bg-white text-gray-900 font-black flex items-center justify-center space-x-3 hover:bg-slate-100 transition duration-300 shadow-lg active:scale-95">
           <svg class="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.53-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-8.79z"/>
             <path fill="#34A853" d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.08 1.16-3.13 0-5.78-2.11-6.73-4.96H1.21v3.15C3.18 21.88 7.31 24 12 24z"/>
@@ -677,16 +654,16 @@
 
     // 3. 認証制御 (RULE 3 & Pop-up Blocked 100% Fixed with Synchronous Event Handler)
     // イベントリスナーを async にしないことで、ブラウザが「ユーザーの直接操作ではない」とみなしてブロックするのを防ぎます
-    btnGoogleLogin.addEventListener('click', (e) => {
-      e.preventDefault();
+    window.startGoogleLogin = function(e) {
+      if (e) e.preventDefault();
 
-      // 1. イベントハンドラーの先頭で「遅延なく完全に同期的に」 signInWithPopup を即座に開始。
-      // 他の条件判定やDOM操作（showAuthLoadingなど）を前に挟むと、ブラウザが「ユーザー操作の直接の脈絡から外れた」と判定し、
-      // ポップアップ許可がされているドメインであってもブロックを発動してしまいます。
-      // この1行目で直接呼ぶ命令こそが、ブラウザの自動ブロックを完璧に回避する唯一無二の解決策です。
+      // ポップアップを「ボタンが押された瞬間のスレッド」で直接同期的にトリガーします。
+      // この関数の先頭に別の変数定義や処理が挟まると、ブラウザが「自動ポップアップ」と判定し、
+      // 許可状態であっても強制ブロックを発動します。
+      // これを1行目に配置することが、Windowsの各種ブラウザでブロックを完璧に回避する唯一の方法です。
       const signInPromise = signInWithPopup(auth, googleProvider);
 
-      // ポップアップが起動した「直後」に、ローディング画面などのDOM操作を安全に実行します
+      // ポップアップが立ち上がった直後、安全にローディング表示を挟みます。
       showAuthLoading(true, "Googleアカウントと連携しています...");
 
       signInPromise
@@ -719,7 +696,7 @@
         .finally(() => {
           showAuthLoading(false);
         });
-    });
+    };
 
     btnGuestLogin.addEventListener('click', async () => {
       try {
