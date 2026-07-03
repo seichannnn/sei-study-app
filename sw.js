@@ -1,4 +1,4 @@
-const CACHE_NAME = 'studyflow-v5';
+const CACHE_NAME = 'studyflow-v6';
 const ASSETS_TO_CACHE = [
   'index.html',
   'manifest.json',

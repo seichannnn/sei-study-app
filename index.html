@@ -864,7 +864,7 @@
 
     // Easy IDが存在するかチェックするヘルパー
     async function checkIfEasyIdExists(easyId) {
-      const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'easyIds', easyId);
+      const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'easyIds', easyId);
       try {
         const snap = await getDoc(easyIdDocRef);
         return snap.exists();
@@ -930,7 +930,7 @@
         }
 
         // 2. easyIds コレクションに登録
-        const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'easyIds', easyId);
+        const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'easyIds', easyId);
         await setDoc(easyIdDocRef, {
           uid: user.uid,
           displayName: name
@@ -1005,7 +1005,7 @@
         // アノニマス（ゲスト）でまだIDがない場合、仮のeasyIdを設定する（重複チェック付き）
         if (user.isAnonymous && !easyId) {
           easyId = `GUEST-${Math.floor(1000 + Math.random() * 9000)}`;
-          const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'easyIds', easyId);
+          const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'easyIds', easyId);
           await setDoc(easyIdDocRef, { uid: user.uid, displayName: currentName });
         }
 
@@ -1159,7 +1159,7 @@
       let targetDisplayName = '';
 
       // 1. まずeasyIdsで逆引きを試みる
-      const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'easyIds', inputId);
+      const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'easyIds', inputId);
       try {
         const easySnap = await getDoc(easyIdDocRef);
         if (easySnap.exists()) {
