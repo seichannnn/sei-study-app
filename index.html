@@ -41,7 +41,7 @@
   </script>
   
   <style>
-    /* 全スマホ対応 of セーフエリア保護レイアウト */
+    /* 全スマホ対応のセーフエリア保護レイアウト */
     body {
       padding-top: env(safe-area-inset-top);
       padding-bottom: env(safe-area-inset-bottom);
@@ -456,7 +456,7 @@
         <div>
           <label class="block text-[10px] tracking-widest text-slate-400 uppercase mb-1.5 font-bold">Subject</label>
           <select id="modal-subject" class="w-full glass-input rounded-xl px-4 py-3.5 text-sm focus:outline-none appearance-none text-slate-100">
-            <option value="英語">🇬 英語</option>
+            <option value="英語">🇬🇧 英語</option>
             <option value="数学">📐 数学</option>
             <option value="国語">📚 国語</option>
             <option value="理科">🧪 理科</option>
@@ -556,11 +556,6 @@
       } catch (e) {
         return true;
       }
-    };
-
-    // スマートフォン / モバイル端末の検知
-    const isMobileDevice = () => {
-      return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
     };
 
     // PWA（ホーム画面追加状態）として起動されているかの検知
@@ -685,55 +680,27 @@
         return;
       }
 
-      // 2. モバイル端末 または PWAホーム画面起動(スタンドアロン)の場合はリダイレクト方式を100%選択
-      if (isMobileDevice() || isStandalonePWA()) {
-        try {
-          showAuthLoading(true, "安全なGoogleログインページへ移動しています...");
-          // 他の自動非同期ログインとバッティングしないように保護フラグをオンにする
-          localStorage.setItem('auth_redirect_in_progress', 'true');
-          await signInWithRedirect(auth, googleProvider);
-        } catch (err) {
-          console.error("Google sign in with redirect failed: ", err);
-          localStorage.removeItem('auth_redirect_in_progress');
-          showAuthLoading(false);
-          showToast("エラーのためゲストログインを試みます。");
-          setTimeout(async () => {
-            try {
-              await signInAnonymously(auth);
-            } catch (subErr) {
-              console.error("Fallback anonymous auth failed: ", subErr);
-              showToast("ログインエラーが発生しました。");
-            }
-          }, 1000);
-        }
-        return;
+      // WindowsPC（ブラウザ）でもスマホでも、Googleログイン時のポップアップブロックによる不具合を完璧に排除するため、
+      // 動作の安定したリダイレクト認証（signInWithRedirect）を標準ログイン処理に決定しました！
+      try {
+        showAuthLoading(true, "安全なGoogleログインページへ移動しています...");
+        // 他の自動非同期ログインとバッティングしないように保護フラグをオンにする
+        localStorage.setItem('auth_redirect_in_progress', 'true');
+        await signInWithRedirect(auth, googleProvider);
+      } catch (err) {
+        console.error("Google sign in with redirect failed: ", err);
+        localStorage.removeItem('auth_redirect_in_progress');
+        showAuthLoading(false);
+        showToast("エラーのためゲストログインを試みます。");
+        setTimeout(async () => {
+          try {
+            await signInAnonymously(auth);
+          } catch (subErr) {
+            console.error("Fallback anonymous auth failed: ", subErr);
+            showToast("ログインエラーが発生しました。");
+          }
+        }, 1000);
       }
-
-      // 3. PCなどの通常ブラウザ環境では、ポップアップ認証を同期的・最優先で即起動
-      showAuthLoading(true, "Googleアカウントと連携しています...");
-      signInWithPopup(auth, googleProvider)
-        .then(async (result) => {
-          if (result && result.user) {
-            showToast("Googleログインに成功しました！");
-            currentUser = result.user;
-            await syncUserProfile(result.user);
-            startRealtimeSync(result.user);
-          }
-        })
-        .catch((err) => {
-          console.error("Popup Auth Error: ", err);
-          if (err.code === 'auth/unauthorized-domain') {
-            const currentHost = window.location.hostname;
-            showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
-          } else if (err.code === 'auth/popup-blocked') {
-            showToast("ポップアップがブロックされました。ブラウザの設定でブロックを解除するか、ゲストログインをお試しください。");
-          } else {
-            showToast("サインインの処理中にエラーが発生しました。");
-          }
-        })
-        .finally(() => {
-          showAuthLoading(false);
-        });
     });
 
     btnGuestLogin.addEventListener('click', async () => {
