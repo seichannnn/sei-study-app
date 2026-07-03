@@ -564,9 +564,13 @@
         try {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            // 自動で安全な初期匿名サインインを行う
+          } else if (isIframeEnvironment()) {
+            // Canvasプレビュー環境（iframe）のみ、セキュリティルール保護のため自動で匿名サインインを行います
             await signInAnonymously(auth);
+          } else {
+            // Vercelなどの本番環境（非iframe）では、勝手に自動ログイン（匿名）は行いません。
+            // ログイン済みの既存セッションがあれば onAuthStateChanged が自動的に検知してアプリを開きます。
+            // セッションがない場合はそのまま綺麗なログイン画面（Auth Screen）を表示します。
           }
         } catch (e) {
           console.error("Initial auth failed. Retrying anonymously...", e);
@@ -597,6 +601,7 @@
           // リスナーを開始
           startRealtimeSync(user);
         } else {
+          currentUser = null;
           authScreen.classList.remove('hidden');
           appScreen.classList.add('hidden');
         }
@@ -651,6 +656,10 @@
     window.triggerSignOut = async function() {
       try {
         await signOut(auth);
+        // キャッシュクリアして完全に初期の未ログイン状態に戻す
+        currentUser = null;
+        authScreen.classList.remove('hidden');
+        appScreen.classList.add('hidden');
         location.reload();
       } catch (err) {
         console.error("Signout error: ", err);
@@ -1214,6 +1223,7 @@
       localStorage.setItem('studyflow_data_v3', JSON.stringify(localState));
     }
 
+    // 統計計算
     function renderStats() {
       const oneWeekAgo = new Date();
       oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
