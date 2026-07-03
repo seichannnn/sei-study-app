@@ -530,7 +530,7 @@
   <script type="module">
     // Firebase Modular imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // 1. 環境変数のセットアップ (ユーザーから提供された最新の firebaseConfig)
@@ -662,31 +662,11 @@
         }
       };
 
-      // 1. Googleリダイレクト認証から戻ってきた結果の回収 (ポップアップブロックを完全に回避)
-      const handleRedirect = async () => {
-        if (!isIframeEnvironment()) {
-          try {
-            const result = await getRedirectResult(auth);
-            if (result && result.user) {
-              loggedInUser = result.user;
-              showToast("Googleログインに成功しました！");
-            }
-          } catch (redirectErr) {
-            console.error("Redirect Auth Error: ", redirectErr);
-            if (redirectErr.code === 'auth/unauthorized-domain') {
-              const currentHost = window.location.hostname;
-              showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
-            } else {
-              showToast("サインインの処理中にエラーが発生しました。");
-            }
-          }
-        }
-        redirectChecked = true;
-        checkInitComplete();
-      };
-
-      // リダイレクト回収処理を開始
-      await handleRedirect();
+      // Vercelホスティング（Firebase Hosting以外）ではサードパーティストレージ制限により
+      // signInWithRedirectのクロスオリジンiframe通信がブロックされるため、
+      // ログインはボタン押下時のsignInWithPopup()で完結させる。ここでは初期化フェーズを進めるだけ。
+      redirectChecked = true;
+      checkInitComplete();
 
       // RULE 3: Firestoreの全クエリを実行する前に、まず確実にAuthトークン（または匿名）でsignInを完了させる
       const initAuth = async () => {
@@ -743,8 +723,8 @@
       });
     });
 
-    // 3. 認証制御 (RULE 3 & Pop-up Blocked 100% Fixed with Redirect Auth)
-    window.startGoogleLogin = function(e) {
+    // 3. 認証制御（Vercelホスティング向け：signInWithPopup方式）
+    window.startGoogleLogin = async function(e) {
       if (e) e.preventDefault();
 
       // 1. iframe内（Canvasのプレビュー画面など）の早期検知
@@ -754,20 +734,27 @@
         return;
       }
 
-      // Windows、スマホに関わらず、一切のポップアップブロックに悩まされないため、
-      // ログインページへの安全な「リダイレクト方式 (signInWithRedirect)」を起動します。
-      showAuthLoading(true, "安全なGoogleログインページへ移動しています...");
-      
-      // 次の初期化フェーズで匿名とバッティングしないようフラグ（リダイレクト中）を明示
-      localStorage.setItem('auth_redirect_in_progress', 'true');
+      showAuthLoading(true, "Googleアカウントを選択してください...");
 
-      signInWithRedirect(auth, googleProvider)
-        .catch((err) => {
-          console.error("Redirect Sign In Error: ", err);
-          localStorage.removeItem('auth_redirect_in_progress');
-          showAuthLoading(false);
+      try {
+        const result = await signInWithPopup(auth, googleProvider);
+        if (result && result.user) {
+          showToast("Googleログインに成功しました！");
+        }
+      } catch (err) {
+        console.error("Popup Sign In Error: ", err);
+        if (err.code === 'auth/popup-blocked') {
+          // ブラウザにポップアップをブロックされた場合のみ案内モーダルを表示
+          showPopupBlockedModal();
+        } else if (err.code === 'auth/unauthorized-domain') {
+          const currentHost = window.location.hostname;
+          showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
+        } else if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
           showToast("サインインの処理中にエラーが発生しました。");
-        });
+        }
+      } finally {
+        showAuthLoading(false);
+      }
     };
 
     btnGuestLogin.addEventListener('click', async () => {
