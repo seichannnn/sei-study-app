@@ -1,0 +1,1358 @@
+<!DOCTYPE html>
+<html lang="ja" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <title>StudyFlow Pro - Connect</title>
+  
+  <!-- PWA & Mobile Web Apps -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="StudyFlow">
+  <link class="apple-touch-icon" href="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=192&h=192&fit=crop&q=80">
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Tailwind CSS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            cyberdark: '#030712',
+            cybercard: 'rgba(15, 23, 42, 0.55)',
+            neonblue: '#38bdf8',
+            neonpurple: '#a855f7',
+            neongreen: '#34d399',
+            neonpink: '#f43f5e'
+          },
+          boxShadow: {
+            'neon-blue': '0 0 15px rgba(56, 189, 248, 0.45)',
+            'neon-purple': '0 0 15px rgba(168, 85, 247, 0.45)',
+            'neon-green': '0 0 15px rgba(52, 211, 153, 0.45)',
+            'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.5)',
+          }
+        }
+      }
+    }
+  </script>
+  
+  <style>
+    /* 全スマホ対応のセーフエリア保護レイアウト */
+    body {
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
+      background: radial-gradient(circle at 50% 0%, #12103e 0%, #030712 100%);
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.6);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    .glass-input {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+    }
+    
+    .glass-input:focus {
+      border-color: #38bdf8;
+      box-shadow: 0 0 12px rgba(56, 189, 248, 0.25);
+    }
+
+    /* じんわり光る呼吸ネオン */
+    @keyframes pulse-neon {
+      0%, 100% { filter: drop-shadow(0 0 4px rgba(56, 189, 248, 0.4)); }
+      50% { filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.75)) drop-shadow(0 0 24px rgba(168, 85, 247, 0.35)); }
+    }
+    .neon-glow-active {
+      animation: pulse-neon 4s infinite ease-in-out;
+    }
+
+    .bg-grid {
+      background-size: 30px 30px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+    }
+
+    ::-webkit-scrollbar {
+      display: none;
+    }
+  </style>
+</head>
+<body class="text-gray-100 font-sans min-h-screen flex flex-col justify-between overflow-hidden bg-cyberdark bg-grid">
+
+  <!-- ================= AUTH SCREEN ================= -->
+  <div id="auth-screen" class="fixed inset-0 z-50 flex flex-col justify-center items-center px-6 bg-cyberdark/95 backdrop-blur-md">
+    <div class="absolute inset-0 bg-grid opacity-30"></div>
+    <!-- 輝く巨大バックライト -->
+    <div class="absolute w-80 h-80 bg-gradient-to-tr from-cyan-500/20 to-purple-600/20 rounded-full blur-3xl -z-10"></div>
+    
+    <div class="w-full max-w-sm text-center space-y-8 z-10">
+      <div class="space-y-3">
+        <div class="inline-flex p-4 rounded-3xl bg-white/5 border border-white/10 shadow-neon-blue">
+          <i data-lucide="sparkles" class="w-12 h-12 text-cyan-400"></i>
+        </div>
+        <h1 class="text-3xl font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-300 to-purple-500 bg-clip-text text-transparent">STUDYFLOW PRO</h1>
+        <p class="text-xs text-slate-400 max-w-xs mx-auto leading-relaxed">
+          全国の仲間とつながる、近未来の学習プラットフォーム。友達を誘って共に高め合おう。
+        </p>
+      </div>
+
+      <!-- ログインオプション -->
+      <div class="space-y-4">
+        <!-- Google認証ボタン -->
+        <button id="btn-google-login" class="w-full py-4 rounded-2xl bg-white text-gray-900 font-black flex items-center justify-center space-x-3 hover:bg-slate-100 transition duration-300 shadow-lg active:scale-95">
+          <svg class="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.53-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.66-5.17 3.66-8.79z"/>
+            <path fill="#34A853" d="M12 24c3.24 0 5.97-1.08 7.96-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.08 1.16-3.13 0-5.78-2.11-6.73-4.96H1.21v3.15C3.18 21.88 7.31 24 12 24z"/>
+            <path fill="#FBBC05" d="M5.27 14.24A7.18 7.18 0 0 1 4.9 12c0-.79.13-1.57.37-2.31V6.54H1.21A11.96 11.96 0 0 0 0 12c0 1.92.45 3.74 1.21 5.39l4.06-3.15z"/>
+            <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.18 2.12 1.21 5.39l4.06 3.15c.95-2.85 3.6-4.96 6.73-4.96z"/>
+          </svg>
+          <span class="text-sm tracking-widest">Googleアカウントで始める</span>
+        </button>
+
+        <div class="relative flex py-2 items-center text-slate-600">
+          <div class="flex-grow border-t border-white/5"></div>
+          <span class="flex-shrink mx-4 text-[10px] tracking-wider uppercase font-bold">OR / ゲスト利用</span>
+          <div class="flex-grow border-t border-white/5"></div>
+        </div>
+
+        <!-- ゲスト/匿名ログイン -->
+        <button id="btn-guest-login" class="w-full py-4 rounded-2xl glass-panel text-slate-300 font-bold hover:text-white transition active:scale-95 text-xs tracking-widest border border-white/10">
+          ゲスト（ログインなし）で試す
+        </button>
+      </div>
+
+      <div class="text-[10px] text-slate-500 font-bold max-w-xs mx-auto">
+        ※ 18歳未満の方も安心・安全に利用できるよう、健康的でクリーンなチャット環境を心がけましょう。
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ================= APP SCREEN ================= -->
+  <div id="app-screen" class="hidden flex-1 flex flex-col justify-between overflow-hidden">
+    
+    <!-- リアルタイム勉強通知バナー（友達が勉強を開始した時にフワッと出る） -->
+    <div id="realtime-toast" class="fixed top-4 left-4 right-4 z-50 glass-panel border border-neongreen/40 rounded-2xl p-4 shadow-neon-green flex items-center space-x-3 transform -translate-y-32 opacity-0 transition-all duration-500">
+      <div class="w-10 h-10 rounded-full bg-neongreen/20 flex items-center justify-center text-neongreen animate-pulse">
+        <i data-lucide="flame" class="w-6 h-6"></i>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-xs font-black tracking-wide text-neongreen uppercase">STUDY ALERT!</p>
+        <p id="realtime-toast-text" class="text-xs text-white font-medium truncate mt-0.5">友達が勉強を開始しました</p>
+      </div>
+      <button onclick="closeRealtimeToast()" class="text-slate-400 hover:text-white">
+        <i data-lucide="x" class="w-4 h-4"></i>
+      </button>
+    </div>
+
+    <!-- ヘッダー -->
+    <header class="px-6 pt-5 pb-4 border-b border-white/5 bg-cyberdark/40 backdrop-blur-xl sticky top-0 z-40 flex justify-between items-center">
+      <div>
+        <h1 class="text-2xl font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-300 to-purple-500 bg-clip-text text-transparent">STUDYFLOW</h1>
+        <p class="text-[10px] tracking-widest text-slate-400 mt-0.5">TODAY: <span id="header-today-time" class="font-bold text-cyan-400">0 MIN</span></p>
+      </div>
+      <div class="flex items-center space-x-2">
+        <span id="user-display-name" class="text-xs text-slate-400 font-bold max-w-[100px] truncate">GUEST</span>
+        <!-- クイックマニュアル入力 -->
+        <button onclick="openAddModal()" class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 to-purple-600 text-white flex items-center justify-center transition active:scale-90 shadow-neon-blue">
+          <i data-lucide="plus" class="w-5 h-5"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- メインエリア -->
+    <main class="flex-1 overflow-y-auto px-5 py-4 pb-28 space-y-6">
+      
+      <!-- ================= 1. タイマータブ ================= -->
+      <div id="tab-timer" class="tab-content space-y-8">
+        
+        <!-- 科目選択 -->
+        <div class="glass-panel rounded-2xl p-4 shadow-glass">
+          <label class="block text-[10px] tracking-widest uppercase text-slate-400 mb-2 font-bold">🎯 TARGET SUBJECT</label>
+          <div class="relative">
+            <select id="timer-subject" class="w-full glass-input rounded-xl px-4 py-3.5 text-sm focus:outline-none appearance-none text-slate-100 font-medium">
+              <option value="英語">🇬🇧 ENGLISH / 英語</option>
+              <option value="数学">📐 MATH / 数学</option>
+              <option value="国語">📚 JAPANESE / 国語</option>
+              <option value="理科">🧪 SCIENCE / 理科</option>
+              <option value="社会">🌍 SOCIAL / 社会</option>
+              <option value="その他">✏️ OTHER / その他</option>
+            </select>
+            <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-cyan-400">
+              <i data-lucide="chevron-down" class="w-4 h-4"></i>
+            </div>
+          </div>
+        </div>
+
+        <!-- 巨大サークルタイマー -->
+        <div class="flex flex-col items-center justify-center py-4">
+          <div class="relative w-72 h-72 flex items-center justify-center rounded-full bg-slate-950/40 border border-white/5 shadow-glass neon-glow-active">
+            <div class="absolute inset-4 rounded-full bg-gradient-to-tr from-cyan-500/5 to-purple-500/5 blur-xl"></div>
+            
+            <svg class="absolute top-0 left-0 w-full h-full transform -rotate-90 scale-[0.92]">
+              <circle cx="144" cy="144" r="130" stroke="rgba(255, 255, 255, 0.02)" stroke-width="6" fill="transparent" />
+              <circle id="timer-progress" cx="144" cy="144" r="130" stroke="url(#neon-grad)" stroke-width="8" fill="transparent" 
+                stroke-dasharray="816.8" stroke-dashoffset="816.8" stroke-linecap="round" class="transition-all duration-1000" />
+              
+              <defs>
+                <linearGradient id="neon-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#38bdf8" />
+                  <stop offset="100%" stop-color="#a855f7" />
+                </linearGradient>
+                <linearGradient id="break-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#34d399" />
+                  <stop offset="100%" stop-color="#059669" />
+                </linearGradient>
+              </defs>
+            </svg>
+            
+            <div class="text-center z-10">
+              <span id="timer-mode" class="text-[10px] tracking-[0.2em] uppercase text-cyan-400 font-black">READY</span>
+              <span id="timer-display" class="block text-6xl font-black font-mono text-white tracking-tighter my-2 drop-shadow-[0_0_10px_rgba(255,255,255,0.15)]">25:00</span>
+              <span id="timer-subject-display" class="text-xs text-slate-400 font-semibold px-3 py-1 rounded-full bg-white/5 border border-white/5">英語</span>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-center space-x-6 mt-10 w-full max-w-xs">
+            <!-- リセット -->
+            <button onclick="resetTimer()" class="w-12 h-12 rounded-2xl glass-panel flex items-center justify-center text-slate-400 hover:text-white transition active:scale-90">
+              <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+            </button>
+            
+            <!-- 再生/一時停止 -->
+            <button id="btn-play" onclick="toggleTimer()" class="w-20 h-20 rounded-3xl bg-gradient-to-tr from-cyan-400 to-purple-500 flex items-center justify-center text-white shadow-neon-blue hover:brightness-110 transition active:scale-95">
+              <i id="play-icon" data-lucide="play" class="w-8 h-8 fill-current text-white"></i>
+            </button>
+            
+            <!-- スキップ -->
+            <button onclick="skipTimer()" class="w-12 h-12 rounded-2xl glass-panel flex items-center justify-center text-slate-400 hover:text-white transition active:scale-90">
+              <i data-lucide="chevrons-right" class="w-5 h-5"></i>
+            </button>
+          </div>
+        </div>
+
+        <!-- クイック設定 -->
+        <div class="grid grid-cols-3 gap-3">
+          <button onclick="setTimerDuration(15)" class="glass-panel py-3.5 rounded-xl text-xs font-semibold text-slate-300 hover:border-cyan-500/50 transition active:scale-95">15 MIN</button>
+          <button onclick="setTimerDuration(25)" class="glass-panel py-3.5 rounded-xl text-xs font-semibold text-cyan-400 border-cyan-500/30 hover:border-cyan-500/50 transition active:scale-95">25 MIN</button>
+          <button onclick="setTimerDuration(50)" class="glass-panel py-3.5 rounded-xl text-xs font-semibold text-slate-300 hover:border-cyan-500/50 transition active:scale-95">50 MIN</button>
+        </div>
+
+      </div>
+
+      <!-- ================= 2. 友達・チャットタブ ================= -->
+      <div id="tab-friends" class="tab-content hidden space-y-6">
+        
+        <!-- 友達追加検索部 -->
+        <div class="glass-panel rounded-2xl p-4 shadow-glass space-y-3">
+          <h3 class="text-xs font-black tracking-wider text-slate-300 uppercase">🤝 FRIEND SEARCH / 友達を追加</h3>
+          <div class="flex space-x-2">
+            <input type="text" id="friend-search-input" placeholder="相手のユーザーIDを入力..." class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none">
+            <button onclick="addFriendById()" class="bg-cyan-500 text-slate-950 font-black px-4 rounded-xl text-xs hover:bg-cyan-400 transition active:scale-95">追加する</button>
+          </div>
+          <p class="text-[9px] text-slate-500 font-bold leading-normal">
+            ※ 友達の登録には相手の正確な「ユーザーID」が必要です（設定タブからコピー可能）。
+          </p>
+        </div>
+
+        <!-- 友達リスト＆チャットセレクター -->
+        <div class="space-y-3">
+          <h2 class="text-base font-black tracking-wider text-slate-300 uppercase">👥 FRIENDS LIST</h2>
+          <div id="friends-list-container" class="space-y-3">
+            <!-- JSでロード -->
+          </div>
+        </div>
+
+        <!-- リアルタイムチャットルーム（友達を選択するとここに展開） -->
+        <div id="chat-box-area" class="glass-panel rounded-2xl p-4 shadow-glass hidden flex flex-col h-[350px]">
+          <div class="flex justify-between items-center border-b border-white/5 pb-3">
+            <div class="flex items-center space-x-2">
+              <div class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></div>
+              <span id="chat-target-name" class="font-black text-xs text-slate-200">CHAT</span>
+            </div>
+            <button onclick="closeChatArea()" class="text-slate-400 hover:text-white">
+              <i data-lucide="minus" class="w-4 h-4"></i>
+            </button>
+          </div>
+
+          <!-- メッセージ表示部 -->
+          <div id="chat-messages-scroll" class="flex-1 overflow-y-auto py-3 space-y-3 pr-1 text-xs">
+            <!-- メッセージロード -->
+          </div>
+
+          <!-- メッセージ入力 -->
+          <div class="flex space-x-2 border-t border-white/5 pt-3">
+            <input type="text" id="chat-input-text" placeholder="メッセージを入力（クリーンに話そう）" class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none">
+            <button onclick="sendChatMessage()" class="w-11 h-11 bg-cyan-500 text-slate-950 rounded-xl flex items-center justify-center hover:bg-cyan-400 transition active:scale-95">
+              <i data-lucide="send" class="w-4 h-4"></i>
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================= 3. ランキング・統計タブ ================= -->
+      <div id="tab-leaderboard" class="tab-content hidden space-y-6">
+        
+        <div class="flex justify-between items-center">
+          <h2 class="text-base font-black tracking-wider text-slate-300 uppercase">🏆 WORLD RANKING</h2>
+          <span class="text-[9px] bg-cyan-950 text-cyan-400 font-extrabold px-2 py-1 rounded-full border border-cyan-800/40">REALTIME</span>
+        </div>
+
+        <!-- リーダーボードコンテナ -->
+        <div id="leaderboard-container" class="space-y-3">
+          <!-- JSでレンダリング -->
+        </div>
+
+        <!-- 個人成績サマリー -->
+        <div class="grid grid-cols-2 gap-4">
+          <div class="glass-panel rounded-2xl p-4 text-center">
+            <span class="text-[10px] tracking-wider text-slate-400 font-bold uppercase block">ACTIVE DAYS</span>
+            <span id="stat-total-days" class="block text-2xl font-black text-transparent bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text mt-1">0 DAYS</span>
+          </div>
+          <div class="glass-panel rounded-2xl p-4 text-center">
+            <span class="text-[10px] tracking-wider text-slate-400 font-bold uppercase block">DAILY AVG</span>
+            <span id="stat-avg-daily" class="block text-2xl font-black text-transparent bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text mt-1">0 MIN</span>
+          </div>
+        </div>
+
+        <!-- 目標達成度 -->
+        <div class="glass-panel rounded-2xl p-5 shadow-glass relative overflow-hidden">
+          <div class="flex justify-between items-center mb-3">
+            <span class="text-xs font-bold tracking-wider text-slate-400">WEEKLY GOAL: <span id="stat-weekly-goal-val">10</span>h</span>
+            <span id="weekly-goal-percent" class="text-xs font-black text-cyan-400">0%</span>
+          </div>
+          <div class="w-full bg-slate-950 rounded-full h-3 overflow-hidden p-[1px] border border-white/5">
+            <div id="weekly-goal-bar" class="bg-gradient-to-r from-cyan-400 via-sky-400 to-purple-500 h-full rounded-full transition-all duration-700" style="width: 0%"></div>
+          </div>
+          <div class="flex justify-between text-[10px] text-slate-500 mt-2.5 font-bold">
+            <span>PROGRESS: <span id="stat-weekly-hours" class="text-slate-300">0.0</span> HRS</span>
+            <span>REMAIN: <span id="stat-weekly-remain" class="text-slate-300">10.0</span> HRS</span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ================= 4. 設定タブ ================= -->
+      <div id="tab-settings" class="tab-content hidden space-y-6">
+        <h2 class="text-base font-black tracking-wider text-slate-300 uppercase mb-2">⚙️ PREFERENCES</h2>
+        
+        <!-- プロフィール設定 -->
+        <div class="glass-panel rounded-2xl p-5 shadow-glass space-y-4">
+          <h3 class="text-xs font-black tracking-wider text-slate-400 uppercase">👤 USER PROFILE</h3>
+          
+          <div>
+            <label class="block text-[10px] tracking-widest text-slate-500 uppercase mb-1.5 font-bold">My Display Name / 表示名</label>
+            <div class="flex space-x-2">
+              <input type="text" id="profile-display-name" placeholder="名前を入力..." class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none">
+              <button onclick="updateProfileName()" class="bg-purple-600 text-white font-black px-4 rounded-xl text-xs hover:bg-purple-500 transition active:scale-95">更新</button>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-[10px] tracking-widest text-slate-500 uppercase mb-1.5 font-bold">My User ID (友達追加用)</label>
+            <div class="flex space-x-2">
+              <input type="text" id="profile-uid-text" readonly class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-slate-400 bg-white/5 select-all focus:outline-none">
+              <button onclick="copyUserId()" class="bg-white/10 hover:bg-white/20 text-white px-4 rounded-xl text-xs transition active:scale-95">コピー</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- インターバル設定 -->
+        <div class="glass-panel rounded-2xl divide-y divide-white/5 shadow-glass">
+          <div class="p-4 flex justify-between items-center">
+            <div>
+              <span class="block text-sm font-bold text-slate-200">FOCUS INTERVAL</span>
+              <span class="text-[10px] text-slate-400">集中セッション時間（分）</span>
+            </div>
+            <input type="number" id="cfg-study-time" value="25" class="w-16 glass-input rounded-lg px-2 py-2 text-center font-bold text-cyan-400 focus:outline-none">
+          </div>
+          
+          <div class="p-4 flex justify-between items-center">
+            <div>
+              <span class="block text-sm font-bold text-slate-200">BREAK INTERVAL</span>
+              <span class="text-[10px] text-slate-400">リフレッシュ休憩時間（分）</span>
+            </div>
+            <input type="number" id="cfg-break-time" value="5" class="w-16 glass-input rounded-lg px-2 py-2 text-center font-bold text-emerald-400 focus:outline-none">
+          </div>
+
+          <div class="p-4 flex justify-between items-center">
+            <div>
+              <span class="block text-sm font-bold text-slate-200">WEEKLY TARGET</span>
+              <span class="text-[10px] text-slate-400">週間の目標学習時間（時間）</span>
+            </div>
+            <input type="number" id="cfg-weekly-goal" value="10" class="w-16 glass-input rounded-lg px-2 py-2 text-center font-bold text-purple-400 focus:outline-none">
+          </div>
+        </div>
+
+        <!-- ログアウト / 移行 -->
+        <div class="glass-panel rounded-2xl p-4 flex justify-between items-center">
+          <div>
+            <span class="block text-xs font-bold text-slate-400 uppercase">SESSION CONTROL</span>
+            <span class="text-[10px] text-slate-500">アカウント連携のログアウト</span>
+          </div>
+          <button onclick="triggerSignOut()" class="bg-red-500/20 hover:bg-red-500/30 text-red-400 font-bold px-4 py-2 rounded-xl text-xs transition active:scale-95">ログアウト</button>
+        </div>
+      </div>
+
+    </main>
+
+    <!-- ボトムタブバー -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-cyberdark/80 backdrop-blur-2xl border-t border-white/5 z-40 px-6 pt-3 pb-8 flex justify-between items-center">
+      <button onclick="switchTab('timer')" id="nav-timer" class="flex flex-col items-center space-y-1 text-cyan-400 transition-all">
+        <i data-lucide="compass" class="w-5 h-5"></i>
+        <span class="text-[9px] font-black tracking-wider">FOCUS</span>
+      </button>
+      <button onclick="switchTab('friends')" id="nav-friends" class="flex flex-col items-center space-y-1 text-slate-500 transition-all hover:text-slate-200">
+        <i data-lucide="users" class="w-5 h-5"></i>
+        <span class="text-[9px] font-black tracking-wider">FRIENDS</span>
+      </button>
+      <button onclick="switchTab('leaderboard')" id="nav-leaderboard" class="flex flex-col items-center space-y-1 text-slate-500 transition-all hover:text-slate-200">
+        <i data-lucide="trophy" class="w-5 h-5"></i>
+        <span class="text-[9px] font-black tracking-wider">RANKING</span>
+      </button>
+      <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center space-y-1 text-slate-500 transition-all hover:text-slate-200">
+        <i data-lucide="sliders" class="w-5 h-5"></i>
+        <span class="text-[9px] font-black tracking-wider">PREFS</span>
+      </button>
+    </nav>
+
+  </div>
+
+  <!-- 手動追加ハーフシートモーダル -->
+  <div id="add-modal" class="fixed inset-0 bg-cyberdark/80 backdrop-blur-md z-50 flex items-end justify-center hidden opacity-0 transition-opacity duration-300">
+    <div class="glass-panel w-full max-w-md rounded-t-[2.5rem] border-t border-white/10 p-6 space-y-5 pb-12 transform translate-y-full transition-transform duration-300 shadow-glass">
+      <div class="w-12 h-1 bg-white/20 rounded-full mx-auto mb-1"></div>
+      <div class="flex justify-between items-center">
+        <h3 class="text-md font-black tracking-wider text-slate-200">MANUAL TRACKING</h3>
+        <button onclick="closeAddModal()" class="w-8 h-8 rounded-full bg-white/5 text-slate-400 flex items-center justify-center hover:text-white transition">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-[10px] tracking-widest text-slate-400 uppercase mb-1.5 font-bold">Subject</label>
+          <select id="modal-subject" class="w-full glass-input rounded-xl px-4 py-3.5 text-sm focus:outline-none appearance-none text-slate-100">
+            <option value="英語">🇬🇧 英語</option>
+            <option value="数学">📐 数学</option>
+            <option value="国語">📚 国語</option>
+            <option value="理科">🧪 理科</option>
+            <option value="社会">🌍 社会</option>
+            <option value="その他">✏️ その他</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[10px] tracking-widest text-slate-400 uppercase mb-1.5 font-bold">Duration (Minutes)</label>
+          <input type="number" id="modal-duration" value="30" class="w-full glass-input rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none">
+        </div>
+
+        <div>
+          <label class="block text-[10px] tracking-widest text-slate-400 uppercase mb-1.5 font-bold">Memo / Accomplishment</label>
+          <input type="text" id="modal-memo" placeholder="何を実行しましたか？" class="w-full glass-input rounded-xl px-4 py-3.5 text-sm text-white focus:outline-none">
+        </div>
+
+        <button onclick="saveManualRecord()" class="w-full bg-gradient-to-r from-cyan-400 to-purple-500 hover:brightness-110 text-white font-black py-4 rounded-xl transition shadow-neon-blue text-sm tracking-widest">
+          ADD TO LOGS
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- トースト通知 -->
+  <div id="toast" class="fixed top-14 left-1/2 transform -translate-x-1/2 glass-panel border border-cyan-500/30 text-cyan-300 text-xs px-5 py-3 rounded-2xl shadow-neon-blue z-50 flex items-center space-x-2 hidden transition-all duration-300">
+    <i data-lucide="sparkles" class="w-4 h-4 text-cyan-400"></i>
+    <span id="toast-message" class="font-bold tracking-wide">SUCCESS</span>
+  </div>
+
+  <!-- ================= FIREBASE & APP LOGIC ================= -->
+  <script type="module">
+    // Firebase Modular imports
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // 1. 環境変数のセットアップ (ユーザーから提供された最新の firebaseConfig)
+    const appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'studyflow-nextgen-pwa';
+    const firebaseConfig = typeof __firebase_config !== 'undefined' 
+      ? JSON.parse(__firebase_config) 
+      : {
+          apiKey: "AIzaSyBRQV2b25kdDbz4nn4-iBhccn05CZFf51I",
+          authDomain: "study-app-5b3e9.firebaseapp.com",
+          projectId: "study-app-5b3e9",
+          storageBucket: "study-app-5b3e9.firebasestorage.app",
+          messagingSenderId: "64430278263",
+          appId: "1:64430278263:web:099ffdda52911a36e7a872",
+          measurementId: "G-XQ9CKRZL3V"
+        };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const googleProvider = new GoogleAuthProvider();
+
+    // 2. ローカル＆リアルタイム状態管理
+    let currentUser = null;
+    let friendsIdList = []; // 友達登録されているUIDリスト
+    let globalProfiles = {}; // 全ユーザーのキャッシュデータ（ランキング、チャット相手情報）
+    let activeChatFriendId = null; // 現在チャット中の友達のUID
+    let friendsActiveStatuses = {}; // 友達の勉強状態を監視するためのキャッシュ
+
+    let timerInterval = null;
+    let isRunning = false;
+    let isStudyMode = true;
+    let currentSeconds = 25 * 60;
+    let originalSeconds = 25 * 60;
+
+    let localState = {
+      logs: [],
+      settings: {
+        studyTime: 25,
+        breakTime: 5,
+        weeklyGoal: 10
+      }
+    };
+
+    // DOM要素のバインド
+    const authScreen = document.getElementById('auth-screen');
+    const appScreen = document.getElementById('app-screen');
+    const btnGoogleLogin = document.getElementById('btn-google-login');
+    const btnGuestLogin = document.getElementById('btn-guest-login');
+    const timerProgress = document.getElementById('timer-progress');
+    const timerDisplay = document.getElementById('timer-display');
+    const timerMode = document.getElementById('timer-mode');
+    const timerSubject = document.getElementById('timer-subject');
+    const timerSubjectDisplay = document.getElementById('timer-subject-display');
+    const headerTodayTime = document.getElementById('header-today-time');
+    const playIcon = document.getElementById('play-icon');
+
+    // 起動環境チェック（iframe制限等）
+    const isIframeEnvironment = () => {
+      try {
+        return window.self !== window.top;
+      } catch (e) {
+        return true;
+      }
+    };
+
+    // 起動時の初期化
+    window.addEventListener('load', async () => {
+      lucide.createIcons();
+      loadLocalState();
+      applySettingsToTimer();
+      syncSubjectDisplay();
+
+      // RULE 3: Firestoreの全クエリを実行する前に、まず確実にAuthトークン（または匿名）でsignInを完了させる
+      const initAuth = async () => {
+        try {
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            // 自動で安全な初期匿名サインインを行う
+            await signInAnonymously(auth);
+          }
+        } catch (e) {
+          console.error("Initial auth failed. Retrying anonymously...", e);
+          try {
+            await signInAnonymously(auth);
+          } catch (retryErr) {
+            console.error("Critical: Fallback auth failed.", retryErr);
+          }
+        }
+      };
+
+      // 認証の初期シーケンスを最優先で完了させる
+      await initAuth();
+
+      // Firebase Auth Listener（サインインが完了するとここが走り出す）
+      onAuthStateChanged(auth, async (user) => {
+        if (user) {
+          currentUser = user;
+          authScreen.classList.add('hidden');
+          appScreen.classList.remove('hidden');
+          
+          document.getElementById('user-display-name').textContent = user.displayName || 'GUEST';
+          document.getElementById('profile-display-name').value = user.displayName || 'GUEST';
+          document.getElementById('profile-uid-text').value = user.uid;
+
+          // データベース初期同期
+          await syncUserProfile(user);
+          // リスナーを開始
+          startRealtimeSync(user);
+        } else {
+          authScreen.classList.remove('hidden');
+          appScreen.classList.add('hidden');
+        }
+      });
+    });
+
+    // 3. 認証制御 (RULE 3 & Iframe/Cancelled-Popup Fix)
+    btnGoogleLogin.addEventListener('click', async () => {
+      // 1. iframe内、またはポップアップの許可されないサンドボックス環境の早期検知
+      if (isIframeEnvironment()) {
+        showToast("プレビュー環境制限のため、自動でゲストログインを開始します（デプロイ後にGoogleログインが利用可能です）");
+        setTimeout(async () => {
+          try {
+            await signInAnonymously(auth);
+          } catch (e) {
+            console.error("Anonymous auth failed: ", e);
+            showToast("ログインに失敗しました。");
+          }
+        }, 500);
+        return;
+      }
+
+      try {
+        await signInWithPopup(auth, googleProvider);
+        showToast("Googleログインしました！");
+      } catch (err) {
+        console.error("Popup blocked or auth error. Falling back to anonymous...", err);
+        
+        // 2. "Pending promise was never set" を回避するため、非同期タスクを遅延(setTimeout)させてから実行
+        setTimeout(async () => {
+          try {
+            await signInAnonymously(auth);
+            showToast("ゲスト（匿名ログイン）として開始しました（Googleログイン制限のため）");
+          } catch (subErr) {
+            console.error("Fallback anonymous auth failed: ", subErr);
+            showToast("ログインエラーが発生しました。");
+          }
+        }, 600);
+      }
+    });
+
+    btnGuestLogin.addEventListener('click', async () => {
+      try {
+        await signInAnonymously(auth);
+        showToast("ゲストとしてログインしました");
+      } catch (err) {
+        console.error("Guest login error: ", err);
+        showToast("ログインに失敗しました");
+      }
+    });
+
+    window.triggerSignOut = async function() {
+      try {
+        await signOut(auth);
+        location.reload();
+      } catch (err) {
+        console.error("Signout error: ", err);
+        showToast("ログアウトに失敗しました");
+      }
+    };
+
+    // 4. データ同期システム（RULE 1 ＆ RULE 3 遵守）
+    async function syncUserProfile(user) {
+      // 認証ガード: ユーザーオブジェクトがない場合は早期リターンし、パーミッションエラーを防ぐ
+      if (!user) return;
+      
+      // 今日の累積学習時間を算出
+      const today = new Date().toISOString().split('T')[0];
+      const todayMinutes = localState.logs
+        .filter(log => log.date === today)
+        .reduce((sum, log) => sum + log.duration, 0);
+
+      // 総勉強時間を算出
+      const totalMinutes = localState.logs.reduce((sum, log) => sum + log.duration, 0);
+
+      // RULE 1: /artifacts/{appId}/public/data/users/{userId} への格納
+      const profileDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
+      
+      try {
+        const snap = await getDoc(profileDocRef);
+        let currentName = user.displayName || 'GUEST';
+        if (snap.exists() && snap.data().displayName) {
+          currentName = snap.data().displayName;
+        }
+
+        await setDoc(profileDocRef, {
+          uid: user.uid,
+          displayName: currentName,
+          totalStudyMinutes: totalMinutes,
+          isStudying: isRunning && isStudyMode,
+          currentSubject: isRunning && isStudyMode ? timerSubject.value : '',
+          lastActive: Date.now()
+        }, { merge: true });
+
+        document.getElementById('user-display-name').textContent = currentName;
+        document.getElementById('profile-display-name').value = currentName;
+      } catch (e) {
+        console.error("Failed to sync profile document: ", e);
+      }
+    }
+
+    // リアルタイムリスナーの始動 (友達・チャット・ランキング)
+    function startRealtimeSync(user) {
+      // 認証ガード: ユーザーがいない状態でのFirestoreリクエストを完璧に阻止
+      if (!user) return;
+
+      // A. プライベートデータ同期 (友達リスト) (RULE 1)
+      const friendsDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'config', 'friends');
+      onSnapshot(friendsDocRef, (snap) => {
+        if (snap.exists()) {
+          friendsIdList = snap.data().list || [];
+        } else {
+          friendsIdList = [];
+        }
+        renderFriendsList();
+        renderStats();
+      }, (err) => console.log("Friends list fetch guarded.", err));
+
+      // B. パブリックデータ同期 (全ユーザー情報 -> ランキング/友達情報)
+      const usersColRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+      onSnapshot(usersColRef, (snap) => {
+        globalProfiles = {};
+        snap.forEach(docSnap => {
+          globalProfiles[docSnap.id] = docSnap.data();
+        });
+        
+        detectFriendStudyStarts(); // 勉強開始の検知
+        renderLeaderboard();
+        renderFriendsList();
+      }, (err) => console.log("User profiles fetch guarded.", err));
+
+      // C. パブリックメッセージ監視 (チャットルーム用)
+      const messagesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
+      // RULE 2: 複合インデックスを避けるため、全メッセージをシンプルに購読し、メモリ上でソートとフィルタを行う
+      onSnapshot(messagesColRef, (snap) => {
+        const allMsgs = [];
+        snap.forEach(docSnap => {
+          allMsgs.push(docSnap.data());
+        });
+        
+        // タイムスタンプ順にソートしてメモリ保持
+        allMsgs.sort((a,b) => a.timestamp - b.timestamp);
+        window.cachedMessages = allMsgs;
+        if (activeChatFriendId) {
+          renderChatMessages();
+        }
+      }, (err) => console.log("Message fetch guarded.", err));
+    }
+
+    // 友達の勉強開始の検知＆プッシュ通知（チャットには汚染しない独立機能）
+    function detectFriendStudyStarts() {
+      friendsIdList.forEach(friendId => {
+        const profile = globalProfiles[friendId];
+        if (!profile) return;
+
+        const previousStatus = friendsActiveStatuses[friendId];
+        const currentStatus = profile.isStudying;
+
+        // 前回「勉強していない」から、今回「勉強している」になった瞬間
+        if (previousStatus === false && currentStatus === true) {
+          showRealtimeToast(`🌸 友達の「${profile.displayName || '名無し'}」が ${profile.currentSubject || '勉強'} を開始しました！頑張る力を分け合おう！`);
+        }
+
+        // キャッシュ更新
+        friendsActiveStatuses[friendId] = currentStatus;
+      });
+    }
+
+    // 5. 友達追加システム
+    window.addFriendById = async function() {
+      if (!currentUser) return;
+      const targetId = document.getElementById('friend-search-input').value.trim();
+      if (!targetId) return;
+
+      if (targetId === currentUser.uid) {
+        showToast("自分を友達に登録することはできません。");
+        return;
+      }
+
+      // 存在確認
+      const targetProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetId);
+      const snap = await getDoc(targetProfileRef);
+      if (!snap.exists()) {
+        showToast("ユーザーが見つかりません。IDを確認してください。");
+        return;
+      }
+
+      const targetData = snap.data();
+      if (friendsIdList.includes(targetId)) {
+        showToast("すでに友達に追加されています。");
+        return;
+      }
+
+      // 保存 (RULE 1)
+      const updatedList = [...friendsIdList, targetId];
+      const friendsDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'friends');
+      await setDoc(friendsDocRef, { list: updatedList }, { merge: true });
+
+      showToast(`🎉 「${targetData.displayName || 'GUEST'}」を友達に登録しました！`);
+      document.getElementById('friend-search-input').value = '';
+    };
+
+    // 友達の削除
+    window.removeFriend = async function(friendId) {
+      if (!currentUser) return;
+      if (!confirm("本当に友達登録を解除しますか？")) return;
+      const updatedList = friendsIdList.filter(id => id !== friendId);
+      const friendsDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'friends');
+      await setDoc(friendsDocRef, { list: updatedList }, { merge: true });
+      showToast("友達登録を解除しました。");
+      
+      if (activeChatFriendId === friendId) {
+        closeChatArea();
+      }
+    };
+
+    // 友達一覧のレンダリング
+    function renderFriendsList() {
+      const container = document.getElementById('friends-list-container');
+      container.innerHTML = '';
+
+      if (friendsIdList.length === 0) {
+        container.innerHTML = `
+          <div class="glass-panel rounded-2xl py-8 text-center text-slate-500">
+            <i data-lucide="users" class="w-8 h-8 mx-auto mb-2 opacity-30 text-slate-400"></i>
+            <p class="text-xs font-bold uppercase">No Friends Added</p>
+            <p class="text-[10px] text-slate-600 mt-1">IDを入力して、まずは友達を追加しよう！</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      friendsIdList.forEach(friendId => {
+        const profile = globalProfiles[friendId] || { displayName: '接続待ち...', totalStudyMinutes: 0, isStudying: false };
+        const isStudying = profile.isStudying;
+
+        const card = document.createElement('div');
+        card.className = 'glass-panel rounded-2xl p-4 flex flex-col sm:flex-row justify-between sm:items-center gap-3 shadow-glass';
+        
+        card.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <div class="relative">
+              <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-cyan-500 to-purple-600 flex items-center justify-center font-black text-xs text-white">
+                ${(profile.displayName || 'G').substring(0, 2).toUpperCase()}
+              </div>
+              <span class="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-cyberdark ${isStudying ? 'bg-neongreen animate-pulse' : 'bg-slate-600'}"></span>
+            </div>
+            <div class="min-w-0">
+              <div class="flex items-center space-x-2">
+                <span class="font-bold text-sm text-slate-200 truncate">${profile.displayName || 'GUEST'}</span>
+                ${isStudying ? `<span class="text-[8px] bg-neongreen/15 text-neongreen border border-neongreen/30 px-1.5 py-0.5 rounded-full font-black animate-pulse">${profile.currentSubject || '集中'}勉強中🔥</span>` : ''}
+              </div>
+              <p class="text-[10px] text-slate-400 mt-0.5 font-bold">累積時間: <span class="text-cyan-400">${profile.totalStudyMinutes || 0}分</span></p>
+            </div>
+          </div>
+
+          <div class="flex items-center space-x-2 self-end sm:self-auto">
+            <button onclick="openChatRoom('${friendId}')" class="px-3.5 py-2 rounded-xl bg-cyan-950 hover:bg-cyan-900 border border-cyan-800/40 text-cyan-400 text-xs font-black flex items-center space-x-1.5 transition active:scale-95">
+              <i data-lucide="message-square" class="w-3.5 h-3.5"></i>
+              <span>CHAT</span>
+            </button>
+            <button onclick="removeFriend('${friendId}')" class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-slate-500 hover:text-rose-400 transition active:scale-90">
+              <i data-lucide="user-minus" class="w-4 h-4"></i>
+            </button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    // 6. チャットシステム (RULE 1, 2)
+    window.openChatRoom = function(friendId) {
+      activeChatFriendId = friendId;
+      const profile = globalProfiles[friendId] || { displayName: 'GUEST' };
+      
+      document.getElementById('chat-target-name').textContent = `CHAT WITH: ${profile.displayName.toUpperCase()}`;
+      document.getElementById('chat-box-area').classList.remove('hidden');
+      
+      // スクロールを下に
+      renderChatMessages();
+    };
+
+    window.closeChatArea = function() {
+      activeChatFriendId = null;
+      document.getElementById('chat-box-area').classList.add('hidden');
+    };
+
+    function renderChatMessages() {
+      const container = document.getElementById('chat-messages-scroll');
+      container.innerHTML = '';
+
+      if (!activeChatFriendId || !currentUser) return;
+
+      // 1対1のチャンネルキー：並べ替えたUIDコンビネーション
+      const channelId = [currentUser.uid, activeChatFriendId].sort().join('_');
+      const messages = window.cachedMessages || [];
+
+      // メモリ上でのフィルタ
+      const roomMsgs = messages.filter(m => m.channelId === channelId);
+
+      if (roomMsgs.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-6 text-slate-500">
+            <p>メッセージはありません。クリーンで前向きなコミュニケーションを始めよう！</p>
+          </div>
+        `;
+        return;
+      }
+
+      roomMsgs.forEach(msg => {
+        const isMyMsg = msg.senderId === currentUser.uid;
+        const msgDiv = document.createElement('div');
+        msgDiv.className = `flex ${isMyMsg ? 'justify-end' : 'justify-start'} w-full`;
+
+        const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        msgDiv.innerHTML = `
+          <div class="max-w-[80%] space-y-1">
+            <div class="px-3 py-2.5 rounded-2xl ${isMyMsg ? 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-slate-950 rounded-tr-none font-bold' : 'glass-panel text-slate-200 rounded-tl-none border border-white/5'} break-words">
+              ${escapeHTML(msg.text)}
+            </div>
+            <p class="text-[8px] text-slate-500 font-bold ${isMyMsg ? 'text-right' : 'text-left'}">${timeStr}</p>
+          </div>
+        `;
+        container.appendChild(msgDiv);
+      });
+
+      // スクロールを自動最下部へ
+      container.scrollTop = container.scrollHeight;
+    }
+
+    window.sendChatMessage = async function() {
+      const inputEl = document.getElementById('chat-input-text');
+      const text = inputEl.value.trim();
+      if (!text || !activeChatFriendId || !currentUser) return;
+
+      const channelId = [currentUser.uid, activeChatFriendId].sort().join('_');
+      const messagesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
+
+      try {
+        await addDoc(messagesColRef, {
+          channelId,
+          senderId: currentUser.uid,
+          receiverId: activeChatFriendId,
+          text,
+          timestamp: Date.now()
+        });
+        inputEl.value = '';
+      } catch (err) {
+        console.error("Failed to send message: ", err);
+        showToast("メッセージ送信に失敗しました");
+      }
+    };
+
+    // 7. ワールドランキング（リアルタイム＆メモリソート）
+    function renderLeaderboard() {
+      const container = document.getElementById('leaderboard-container');
+      container.innerHTML = '';
+
+      const profilesArray = Object.values(globalProfiles);
+      if (profilesArray.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-6 text-slate-500">
+            <p>ランキングデータ収集中...</p>
+          </div>
+        `;
+        return;
+      }
+
+      // RULE 2: メモリ側でソート
+      profilesArray.sort((a, b) => (b.totalStudyMinutes || 0) - (a.totalStudyMinutes || 0));
+
+      profilesArray.forEach((profile, index) => {
+        const item = document.createElement('div');
+        const rank = index + 1;
+        const isMe = currentUser && profile.uid === currentUser.uid;
+
+        let rankBadge = `${rank}`;
+        if (rank === 1) rankBadge = '🥇';
+        else if (rank === 2) rankBadge = '🥈';
+        else if (rank === 3) rankBadge = '🥉';
+
+        item.className = `glass-panel rounded-2xl p-4 flex justify-between items-center ${isMe ? 'border-cyan-400 shadow-neon-blue bg-cyan-950/20' : 'border-white/5'}`;
+        item.innerHTML = `
+          <div class="flex items-center space-x-3">
+            <span class="text-base font-black w-6 text-center text-slate-400">${rankBadge}</span>
+            <div class="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center font-bold text-xs text-slate-300">
+              ${(profile.displayName || 'G').substring(0, 2).toUpperCase()}
+            </div>
+            <div>
+              <span class="font-bold text-xs text-slate-200 block">${profile.displayName || 'GUEST'}${isMe ? ' (あなた)' : ''}</span>
+              <span class="text-[9px] text-slate-500 font-bold uppercase">ID: ${profile.uid}</span>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="text-sm font-black text-cyan-400 font-mono">${profile.totalStudyMinutes || 0}</span>
+            <span class="text-[9px] text-slate-400 font-bold">分</span>
+          </div>
+        `;
+        container.appendChild(item);
+      });
+    }
+
+    // 8. 勉強時間タイマーロジック
+    const subjectSelect = document.getElementById('timer-subject');
+    subjectSelect.addEventListener('change', () => {
+      syncSubjectDisplay();
+      if (isRunning && isStudyMode) {
+        syncUserProfile(currentUser); // 勉強中の科目を即座に友達に中継
+      }
+    });
+
+    function syncSubjectDisplay() {
+      timerSubjectDisplay.textContent = subjectSelect.value;
+    }
+
+    window.switchTab = function(tabId) {
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      
+      const navButtons = {
+        timer: document.getElementById('nav-timer'),
+        friends: document.getElementById('nav-friends'),
+        leaderboard: document.getElementById('nav-leaderboard'),
+        settings: document.getElementById('nav-settings')
+      };
+      
+      Object.keys(navButtons).forEach(key => {
+        if (key === tabId) {
+          navButtons[key].classList.remove('text-slate-500', 'hover:text-slate-200');
+          navButtons[key].classList.add('text-cyan-400');
+        } else {
+          navButtons[key].classList.add('text-slate-500', 'hover:text-slate-200');
+          navButtons[key].classList.remove('text-cyan-400');
+        }
+      });
+
+      if (tabId === 'leaderboard') renderLeaderboard();
+      if (tabId === 'friends') renderFriendsList();
+    };
+
+    window.applySettingsToTimer = function() {
+      const studyMin = parseInt(document.getElementById('cfg-study-time').value) || 25;
+      const breakMin = parseInt(document.getElementById('cfg-break-time').value) || 5;
+      const goalHours = parseInt(document.getElementById('cfg-weekly-goal').value) || 10;
+      
+      localState.settings = { studyTime: studyMin, breakTime: breakMin, weeklyGoal: goalHours };
+      saveLocalState();
+
+      if (!isRunning) {
+        isStudyMode = true;
+        setTimerDuration(studyMin);
+      }
+    };
+
+    window.setTimerDuration = function(minutes) {
+      if (isRunning) return;
+      currentSeconds = minutes * 60;
+      originalSeconds = currentSeconds;
+      updateTimerDisplay();
+    };
+
+    function updateTimerDisplay() {
+      const minutes = Math.floor(currentSeconds / 60);
+      const seconds = currentSeconds % 60;
+      timerDisplay.textContent = 
+        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      
+      const maxOffset = 816.8;
+      const offset = maxOffset - (currentSeconds / originalSeconds) * maxOffset;
+      timerProgress.style.strokeDashoffset = offset;
+      
+      const timerContainer = document.querySelector('.neon-glow-active');
+      if (isStudyMode) {
+        timerMode.textContent = 'FOCUS TIME';
+        timerMode.className = 'text-[10px] tracking-[0.2em] uppercase text-cyan-400 font-black';
+        timerProgress.setAttribute('stroke', 'url(#neon-grad)');
+        if (timerContainer) {
+          timerContainer.style.filter = 'drop-shadow(0 0 15px rgba(56, 189, 248, 0.4))';
+        }
+      } else {
+        timerMode.textContent = 'REST TIME';
+        timerMode.className = 'text-[10px] tracking-[0.2em] uppercase text-emerald-400 font-black';
+        timerProgress.setAttribute('stroke', 'url(#break-grad)');
+        if (timerContainer) {
+          timerContainer.style.filter = 'drop-shadow(0 0 15px rgba(52, 211, 153, 0.4))';
+        }
+      }
+    }
+
+    window.toggleTimer = function() {
+      if (isRunning) {
+        clearInterval(timerInterval);
+        isRunning = false;
+        playIcon.setAttribute('data-lucide', 'play');
+        syncUserProfile(currentUser); // オンラインに停止を中継
+      } else {
+        isRunning = true;
+        playIcon.setAttribute('data-lucide', 'pause');
+        timerInterval = setInterval(() => {
+          if (currentSeconds > 0) {
+            currentSeconds--;
+            updateTimerDisplay();
+          } else {
+            timerFinished();
+          }
+        }, 1000);
+        syncUserProfile(currentUser); // オンラインに開始を中継
+      }
+      lucide.createIcons();
+    };
+
+    window.resetTimer = function() {
+      clearInterval(timerInterval);
+      isRunning = false;
+      playIcon.setAttribute('data-lucide', 'play');
+      lucide.createIcons();
+      
+      isStudyMode = true;
+      currentSeconds = localState.settings.studyTime * 60;
+      originalSeconds = currentSeconds;
+      updateTimerDisplay();
+      syncUserProfile(currentUser);
+    };
+
+    window.skipTimer = function() {
+      clearInterval(timerInterval);
+      isRunning = false;
+      playIcon.setAttribute('data-lucide', 'play');
+      lucide.createIcons();
+      
+      isStudyMode = !isStudyMode;
+      currentSeconds = (isStudyMode ? localState.settings.studyTime : localState.settings.breakTime) * 60;
+      originalSeconds = currentSeconds;
+      updateTimerDisplay();
+      syncUserProfile(currentUser);
+      showToast(isStudyMode ? "フォーカスセッション" : "リフレッシュセッション");
+    };
+
+    function timerFinished() {
+      clearInterval(timerInterval);
+      isRunning = false;
+      playIcon.setAttribute('data-lucide', 'play');
+      lucide.createIcons();
+      
+      if (navigator.vibrate) {
+        navigator.vibrate([300, 150, 300]);
+      }
+      
+      if (isStudyMode) {
+        const subject = timerSubject.value;
+        const duration = Math.floor(originalSeconds / 60);
+        addRecord(subject, duration, "セッションの完了");
+        showToast(`🎉 ${subject} のセッションが完了しました！`);
+        
+        isStudyMode = false;
+        currentSeconds = localState.settings.breakTime * 60;
+        originalSeconds = currentSeconds;
+      } else {
+        showToast("🔔 休憩が終了しました！");
+        isStudyMode = true;
+        currentSeconds = localState.settings.studyTime * 60;
+        originalSeconds = currentSeconds;
+      }
+      
+      updateTimerDisplay();
+      updateHeaderProgress();
+      syncUserProfile(currentUser);
+    }
+
+    function addRecord(subject, duration, memo = "") {
+      const today = new Date().toISOString().split('T')[0];
+      const newLog = {
+        id: crypto.randomUUID(),
+        subject,
+        duration: parseInt(duration),
+        date: today,
+        memo: memo || `${subject}のセッション`
+      };
+      
+      localState.logs.unshift(newLog);
+      saveLocalState();
+      updateHeaderProgress();
+      syncUserProfile(currentUser); // データベースの総計をアップロード
+    }
+
+    function updateHeaderProgress() {
+      const today = new Date().toISOString().split('T')[0];
+      const todayTotal = localState.logs
+        .filter(log => log.date === today)
+        .reduce((sum, log) => sum + log.duration, 0);
+      
+      headerTodayTime.textContent = `${todayTotal} MIN`;
+    }
+
+    // ローカルストレージ
+    function loadLocalState() {
+      const saved = localStorage.getItem('studyflow_data_v3');
+      if (saved) {
+        try {
+          localState = JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+      document.getElementById('cfg-study-time').value = localState.settings.studyTime || 25;
+      document.getElementById('cfg-break-time').value = localState.settings.breakTime || 5;
+      document.getElementById('cfg-weekly-goal').value = localState.settings.weeklyGoal || 10;
+    }
+
+    function saveLocalState() {
+      localStorage.setItem('studyflow_data_v3', JSON.stringify(localState));
+    }
+
+    function renderStats() {
+      const oneWeekAgo = new Date();
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      
+      const weeklyLogs = localState.logs.filter(log => new Date(log.date) >= oneWeekAgo);
+      const totalWeeklyMinutes = weeklyLogs.reduce((sum, log) => sum + log.duration, 0);
+      const totalWeeklyHours = (totalWeeklyMinutes / 60).toFixed(1);
+      
+      document.getElementById('stat-weekly-hours').textContent = totalWeeklyHours;
+      document.getElementById('stat-weekly-goal-val').textContent = localState.settings.weeklyGoal;
+      
+      const goal = localState.settings.weeklyGoal;
+      const remain = Math.max(0, goal - totalWeeklyHours).toFixed(1);
+      document.getElementById('stat-weekly-remain').textContent = remain;
+      
+      const percent = Math.min(100, Math.round((totalWeeklyHours / goal) * 100));
+      document.getElementById('weekly-goal-percent').textContent = `${percent}%`;
+      document.getElementById('weekly-goal-bar').style.width = `${percent}%`;
+
+      const uniqueDays = [...new Set(localState.logs.map(log => log.date))];
+      const totalDays = uniqueDays.length || 1;
+      document.getElementById('stat-total-days').textContent = `${uniqueDays.length} DAYS`;
+
+      const totalAllMinutes = localState.logs.reduce((sum, log) => sum + log.duration, 0);
+      const avgDaily = Math.round(totalAllMinutes / totalDays);
+      document.getElementById('stat-avg-daily').textContent = `${avgDaily} MIN`;
+    }
+
+    // プロフィール変更
+    window.updateProfileName = async function() {
+      const newName = document.getElementById('profile-display-name').value.trim();
+      if (!newName || !currentUser) return;
+
+      try {
+        const profileDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
+        await setDoc(profileDocRef, { displayName: newName }, { merge: true });
+        showToast("表示名を変更しました");
+        document.getElementById('user-display-name').textContent = newName;
+      } catch (err) {
+        console.error("Profile update failed: ", err);
+        showToast("名前の変更に失敗しました");
+      }
+    };
+
+    window.copyUserId = function() {
+      const el = document.getElementById('profile-uid-text');
+      el.select();
+      document.execCommand('copy');
+      showToast("ユーザーIDをコピーしました！友達に共有しよう！");
+    };
+
+    // 手動追加
+    window.openAddModal = function() {
+      const modal = document.getElementById('add-modal');
+      const inner = modal.querySelector('div');
+      modal.classList.remove('hidden');
+      setTimeout(() => {
+        modal.classList.remove('opacity-0');
+        inner.classList.remove('translate-y-full');
+      }, 50);
+    };
+
+    window.closeAddModal = function() {
+      const modal = document.getElementById('add-modal');
+      const inner = modal.querySelector('div');
+      modal.classList.add('opacity-0');
+      inner.classList.add('translate-y-full');
+      setTimeout(() => {
+        modal.classList.add('hidden');
+      }, 300);
+    };
+
+    window.saveManualRecord = function() {
+      const subject = document.getElementById('modal-subject').value;
+      const duration = parseInt(document.getElementById('modal-duration').value) || 0;
+      const memo = document.getElementById('modal-memo').value;
+
+      if (duration <= 0) {
+        showToast("時間を正しく入力してください");
+        return;
+      }
+
+      addRecord(subject, duration, memo);
+      closeAddModal();
+      showToast(`💪 記録追加: ${subject} (${duration}分)`);
+      
+      renderStats();
+      document.getElementById('modal-duration').value = '30';
+      document.getElementById('modal-memo').value = '';
+    };
+
+    // ユーティリティ
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toast-message');
+      
+      toastMsg.textContent = message;
+      toast.classList.remove('hidden');
+      toast.classList.add('opacity-100');
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => {
+          toast.classList.add('hidden');
+          toast.classList.remove('opacity-0');
+        }, 300);
+      }, 3000);
+    }
+
+    // 友達開始通知バナーのコントロール
+    function showRealtimeToast(text) {
+      const el = document.getElementById('realtime-toast');
+      const textEl = document.getElementById('realtime-toast-text');
+      textEl.textContent = text;
+
+      el.classList.remove('hidden', '-translate-y-32', 'opacity-0');
+      el.classList.add('translate-y-0', 'opacity-100');
+
+      // 6秒後に自動で閉じる
+      setTimeout(() => {
+        closeRealtimeToast();
+      }, 6000);
+    }
+
+    window.closeRealtimeToast = function() {
+      const el = document.getElementById('realtime-toast');
+      el.classList.add('-translate-y-32', 'opacity-0');
+      el.classList.remove('translate-y-0', 'opacity-100');
+    };
+
+    function escapeHTML(str) {
+      return str.replace(/[&<>'"]/g, 
+        tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+      );
+    }
+
+    document.getElementById('cfg-study-time').addEventListener('change', applySettingsToTimer);
+    document.getElementById('cfg-break-time').addEventListener('change', applySettingsToTimer);
+    document.getElementById('cfg-weekly-goal').addEventListener('change', applySettingsToTimer);
+  </script>
+</body>
+</html>
