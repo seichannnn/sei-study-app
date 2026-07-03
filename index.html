@@ -305,14 +305,25 @@
         
         <!-- 友達追加検索部 -->
         <div class="glass-panel rounded-2xl p-4 shadow-glass space-y-3">
-          <h3 class="text-xs font-black tracking-wider text-slate-300 uppercase">🤝 FRIEND SEARCH / 友達を追加</h3>
+          <h3 class="text-xs font-black tracking-wider text-slate-300 uppercase">🤝 FRIEND SEARCH / 友達申請</h3>
           <div class="flex space-x-2">
             <input type="text" id="friend-search-input" placeholder="相手のユーザーIDを入力..." class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none">
-            <button onclick="addFriendById()" class="bg-cyan-500 text-slate-950 font-black px-4 rounded-xl text-xs hover:bg-cyan-400 transition active:scale-95">追加する</button>
+            <button onclick="sendFriendRequest()" class="bg-cyan-500 text-slate-950 font-black px-4 rounded-xl text-xs hover:bg-cyan-400 transition active:scale-95">申請する</button>
           </div>
           <p class="text-[9px] text-slate-500 font-bold leading-normal">
-            ※ 友達の登録には相手の正確な「ユーザーID」が必要です（設定タブからコピー可能）。
+            ※ 友達の登録には相手の正確な「ユーザーID」が必要です（設定タブからコピー可能）。申請を送ると相手に通知が届きます。
           </p>
+        </div>
+
+        <!-- 友達申請一覧 -->
+        <div id="friend-requests-section" class="hidden space-y-3">
+          <h2 class="text-base font-black tracking-wider text-slate-300 uppercase flex items-center space-x-2">
+            <span>📩 FRIEND REQUESTS</span>
+            <span id="friend-request-badge" class="text-[9px] bg-rose-950 text-rose-400 font-extrabold px-2 py-0.5 rounded-full border border-rose-800/40">0</span>
+          </h2>
+          <div id="friend-requests-container" class="space-y-3">
+            <!-- JSでロード -->
+          </div>
         </div>
 
         <!-- 友達リスト＆チャットセレクター -->
@@ -323,32 +334,33 @@
           </div>
         </div>
 
-        <!-- リアルタイムチャットルーム（友達を選択するとここに展開） -->
-        <div id="chat-box-area" class="glass-panel rounded-2xl p-4 shadow-glass hidden flex flex-col h-[350px]">
-          <div class="flex justify-between items-center border-b border-white/5 pb-3">
-            <div class="flex items-center space-x-2">
-              <div class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></div>
-              <span id="chat-target-name" class="font-black text-xs text-slate-200">CHAT WITH</span>
-            </div>
-            <button onclick="closeChatArea()" class="text-slate-400 hover:text-white">
-              <i data-lucide="minus" class="w-4 h-4"></i>
-            </button>
-          </div>
+      </div>
 
-          <!-- メッセージ表示部 -->
-          <div id="chat-messages-scroll" class="flex-1 overflow-y-auto py-3 space-y-3 pr-1 text-xs">
-            <!-- メッセージロード -->
-          </div>
-
-          <!-- メッセージ入力 -->
-          <div class="flex space-x-2 border-t border-white/5 pt-3">
-            <input type="text" id="chat-input-text" placeholder="メッセージを入力（クリーンに話そう）" class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none">
-            <button onclick="sendChatMessage()" class="w-11 h-11 bg-cyan-500 text-slate-950 rounded-xl flex items-center justify-center hover:bg-cyan-400 transition active:scale-95">
-              <i data-lucide="send" class="w-4 h-4"></i>
-            </button>
+      <!-- フルスクリーンチャットルーム (fixedオーバーレイ) -->
+      <div id="chat-box-area" class="fixed inset-0 z-50 bg-cyberdark hidden flex flex-col">
+        <!-- チャットヘッダー -->
+        <div class="flex items-center space-x-3 px-4 pt-14 pb-3 border-b border-white/5 bg-cyberdark/95 backdrop-blur-xl">
+          <button onclick="closeChatArea()" class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 hover:text-white transition active:scale-90">
+            <i data-lucide="arrow-left" class="w-5 h-5"></i>
+          </button>
+          <div class="flex items-center space-x-2 flex-1 min-w-0">
+            <div class="w-2.5 h-2.5 rounded-full bg-cyan-400 animate-pulse"></div>
+            <span id="chat-target-name" class="font-black text-xs text-slate-200 truncate">CHAT WITH</span>
           </div>
         </div>
 
+        <!-- メッセージ表示部 -->
+        <div id="chat-messages-scroll" class="flex-1 overflow-y-auto py-3 px-4 space-y-3 text-xs">
+          <!-- メッセージロード -->
+        </div>
+
+        <!-- メッセージ入力 -->
+        <div class="flex space-x-2 border-t border-white/5 p-4 pb-8 bg-cyberdark/95 backdrop-blur-xl">
+          <input type="text" id="chat-input-text" placeholder="メッセージを入力（クリーンに話そう）" class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none">
+          <button onclick="sendChatMessage()" class="w-11 h-11 bg-cyan-500 text-slate-950 rounded-xl flex items-center justify-center hover:bg-cyan-400 transition active:scale-95">
+            <i data-lucide="send" class="w-4 h-4"></i>
+          </button>
+        </div>
       </div>
 
       <!-- ================= 3. ランキング・統計タブ ================= -->
@@ -471,6 +483,48 @@
         </div>
       </div>
 
+      <!-- ================= 5. 管理者タブ ================= -->
+      <div id="tab-admin" class="tab-content hidden space-y-6">
+        <div class="flex justify-between items-center">
+          <h2 class="text-base font-black tracking-wider text-slate-300 uppercase">🛡️ ADMIN DASHBOARD</h2>
+          <span class="text-[9px] bg-red-950 text-red-400 font-extrabold px-2 py-1 rounded-full border border-red-800/40">SECURE</span>
+        </div>
+
+        <!-- 登録ユーザー一覧 -->
+        <div class="glass-panel rounded-2xl p-5 shadow-glass space-y-4">
+          <h3 class="text-xs font-black tracking-wider text-slate-400 uppercase flex items-center space-x-2">
+            <i data-lucide="users" class="w-4 h-4 text-cyan-400"></i>
+            <span>REGISTERED USERS / 登録ユーザー一覧</span>
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-white/10 text-slate-400 font-bold uppercase tracking-wider">
+                  <th class="py-2.5">ユーザー名 (ID)</th>
+                  <th class="py-2.5">メールアドレス</th>
+                  <th class="py-2.5">登録日時</th>
+                  <th class="py-2.5 text-right">総学習</th>
+                </tr>
+              </thead>
+              <tbody id="admin-users-table-body" class="divide-y divide-white/5 font-medium text-slate-300">
+                <!-- JSでロード -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- 操作ログ一覧 -->
+        <div class="glass-panel rounded-2xl p-5 shadow-glass space-y-4">
+          <h3 class="text-xs font-black tracking-wider text-slate-400 uppercase flex items-center space-x-2">
+            <i data-lucide="scroll" class="w-4 h-4 text-purple-400"></i>
+            <span>SYSTEM LOGS / 操作ログ</span>
+          </h3>
+          <div id="admin-logs-container" class="max-h-[300px] overflow-y-auto space-y-3 pr-1 text-xs">
+            <!-- JSでロード -->
+          </div>
+        </div>
+      </div>
+
     </main>
 
     <!-- ボトムタブバー -->
@@ -490,6 +544,10 @@
       <button onclick="switchTab('settings')" id="nav-settings" class="flex flex-col items-center space-y-1 text-slate-500 transition-all hover:text-slate-200">
         <i data-lucide="sliders" class="w-5 h-5"></i>
         <span class="text-[9px] font-black tracking-wider">PREFS</span>
+      </button>
+      <button onclick="switchTab('admin')" id="nav-admin" class="hidden flex flex-col items-center space-y-1 text-slate-500 transition-all hover:text-slate-200">
+        <i data-lucide="shield-alert" class="w-5 h-5"></i>
+        <span class="text-[9px] font-black tracking-wider">ADMIN</span>
       </button>
     </nav>
 
@@ -572,7 +630,7 @@
     // Firebase Modular imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc, query, where, orderBy, limit, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // 1. 環境変数のセットアップ (ユーザーから提供された最新の firebaseConfig)
     const appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'studyflow-nextgen-pwa';
@@ -759,6 +817,7 @@
           if (isSetupDone) {
             // リスナーを開始 (プロフィール登録が完了している場合のみ)
             startRealtimeSync(user);
+            logAdminAction("LOGIN", "システムにログインしました");
           }
         } else {
           currentUser = null;
@@ -945,6 +1004,8 @@
           displayName: name,
           easyId: easyId,
           isProfileSetup: true,
+          email: user.email || 'Anonymous',
+          createdAt: Date.now(),
           totalStudyMinutes: totalMinutes,
           isStudying: isRunning && isStudyMode,
           currentSubject: isRunning && isStudyMode ? timerSubject.value : '',
@@ -959,6 +1020,9 @@
         showToast(`プロフィールを登録しました！ ID: ${easyId}`);
         closeNameSetupModal();
         
+        // ログ書き込み
+        await logAdminAction("PROFILE_SETUP", "プロフィールの設定を完了しました");
+
         // リアルタイム同期を開始
         startRealtimeSync(user);
       } catch (err) {
@@ -970,6 +1034,29 @@
         btn.textContent = "決定する";
       }
     };
+
+    // システム操作ログをFirestoreに書き込む
+    async function logAdminAction(actionType, details) {
+      if (!currentUser) return;
+      const userName = document.getElementById('user-display-name').textContent || 'UNKNOWN';
+      const userEmail = currentUser.email || 'Anonymous';
+      const easyId = document.getElementById('profile-uid-text').value || 'N/A';
+      
+      const adminLogsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'admin_logs');
+      try {
+        await addDoc(adminLogsColRef, {
+          actionType,
+          userName,
+          userEmail,
+          easyId,
+          uid: currentUser.uid,
+          details,
+          timestamp: Date.now()
+        });
+      } catch (err) {
+        console.error("Failed to write system log: ", err);
+      }
+    }
 
     // 4. データ同期システム（RULE 1 ＆ RULE 3 遵守）
     async function syncUserProfile(user) {
@@ -988,12 +1075,16 @@
         let currentName = user.displayName || 'GUEST';
         let easyId = '';
         let isProfileSetup = false;
+        let isAdmin = false;
+        let createdAt = Date.now();
 
         if (snap.exists()) {
           const data = snap.data();
           if (data.displayName) currentName = data.displayName;
           if (data.easyId) easyId = data.easyId;
           if (data.isProfileSetup) isProfileSetup = data.isProfileSetup;
+          if (data.isAdmin) isAdmin = true;
+          if (data.createdAt) createdAt = data.createdAt;
         }
 
         // Googleログインで、まだプロフィール設定（名前決定）をしていない場合、モーダルを表示して処理を止める
@@ -1013,12 +1104,24 @@
           uid: user.uid,
           displayName: currentName,
           easyId: easyId,
+          email: user.email || 'Anonymous',
+          createdAt: createdAt,
           totalStudyMinutes: totalMinutes,
           isStudying: isRunning && isStudyMode,
           currentSubject: isRunning && isStudyMode ? timerSubject.value : '',
           lastActive: Date.now(),
           isProfileSetup: true
         }, { merge: true });
+
+        // DOMの管理者表示切り替え
+        const navAdmin = document.getElementById('nav-admin');
+        if (navAdmin) {
+          if (isAdmin) {
+            navAdmin.classList.remove('hidden');
+          } else {
+            navAdmin.classList.add('hidden');
+          }
+        }
 
         document.getElementById('user-display-name').textContent = currentName;
         document.getElementById('profile-display-name').value = currentName;
@@ -1149,53 +1252,10 @@
       });
     }
 
-    // 5. 友達追加システム
+    // 5. 友達追加システム（申請制に移行済み → sendFriendRequest() を使用）
     window.addFriendById = async function() {
-      if (!currentUser) return;
-      const inputId = document.getElementById('friend-search-input').value.trim();
-      if (!inputId) return;
-
-      let targetUid = inputId;
-      let targetDisplayName = '';
-
-      // 1. まずeasyIdsで逆引きを試みる
-      const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'easyIds', inputId);
-      try {
-        const easySnap = await getDoc(easyIdDocRef);
-        if (easySnap.exists()) {
-          targetUid = easySnap.data().uid;
-          targetDisplayName = easySnap.data().displayName;
-        }
-      } catch (err) {
-        console.error("Error looking up easyId: ", err);
-      }
-
-      if (targetUid === currentUser.uid) {
-        showToast("自分を友達に登録することはできません。");
-        return;
-      }
-
-      // 2. 存在確認
-      const targetProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetUid);
-      const snap = await getDoc(targetProfileRef);
-      if (!snap.exists()) {
-        showToast("ユーザーが見つかりません。IDを確認してください。");
-        return;
-      }
-
-      const targetData = snap.data();
-      if (friendsIdList.includes(targetUid)) {
-        showToast("すでに友達に追加されています。");
-        return;
-      }
-
-      // 保存 (RULE 1)
-      const updatedList = [...friendsIdList, targetUid];
-      const friendsDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'friends');
-      await setDoc(friendsDocRef, { list: updatedList }, { merge: true });
-
-      showToast(`🎉 「${targetData.displayName || 'GUEST'}」を友達に登録しました！`);
-      document.getElementById('friend-search-input').value = '';
+      // 後方互換: 新しい申請システムにリダイレクト
+      return window.sendFriendRequest();
     };
 
     // 友達の削除
@@ -1423,10 +1483,12 @@
         timer: document.getElementById('nav-timer'),
         friends: document.getElementById('nav-friends'),
         leaderboard: document.getElementById('nav-leaderboard'),
-        settings: document.getElementById('nav-settings')
+        settings: document.getElementById('nav-settings'),
+        admin: document.getElementById('nav-admin')
       };
       
       Object.keys(navButtons).forEach(key => {
+        if (!navButtons[key]) return;
         if (key === tabId) {
           navButtons[key].classList.remove('text-slate-500', 'hover:text-slate-200');
           navButtons[key].classList.add('text-cyan-400');
@@ -1440,7 +1502,14 @@
         renderLeaderboard();
         renderStudyLogsUI();
       }
-      if (tabId === 'friends') renderFriendsList();
+      if (tabId === 'friends') {
+        renderFriendsList();
+        renderFriendRequests();
+      }
+      if (tabId === 'admin') {
+        loadAdminUsers();
+        loadAdminLogs();
+      }
     };
 
     window.applySettingsToTimer = function() {
@@ -1588,11 +1657,15 @@
       updateHeaderProgress();
       syncUserProfile(currentUser); // データベースの総計をアップロード
       uploadLogsToFirestore(); // 学習履歴そのものをアップロード
+      logAdminAction("ADD_RECORD", `${subject} を ${duration} 分間勉強しました。内容: ${memo || '学習セッション'}`);
       renderStats();
       renderStudyLogsUI();
     }
 
     window.removeRecord = async function(id) {
+      const targetLog = localState.logs.find(log => log.id === id);
+      const logDetails = targetLog ? `${targetLog.subject} (${targetLog.duration}分)` : '詳細不明';
+
       if (!confirm("この学習記録を削除しますか？")) return;
       
       localState.logs = localState.logs.filter(log => log.id !== id);
@@ -1605,6 +1678,7 @@
       if (currentUser) {
         await syncUserProfile(currentUser);
         await uploadLogsToFirestore();
+        logAdminAction("DELETE_RECORD", `学習記録を削除しました: ${logDetails}`);
       }
       showToast("学習記録を削除しました");
     };
@@ -1919,6 +1993,397 @@
     document.getElementById('cfg-study-time').addEventListener('change', applySettingsToTimer);
     document.getElementById('cfg-break-time').addEventListener('change', applySettingsToTimer);
     document.getElementById('cfg-weekly-goal').addEventListener('change', applySettingsToTimer);
+
+    // ============================================================
+    // 10. 管理者ダッシュボード機能
+    // ============================================================
+    async function loadAdminUsers() {
+      const tbody = document.getElementById('admin-users-table-body');
+      tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-500">読込中...</td></tr>';
+
+      const usersColRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+      try {
+        const snap = await getDocs(usersColRef);
+        tbody.innerHTML = '';
+        if (snap.empty) {
+          tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-500">ユーザーがいません</td></tr>';
+          return;
+        }
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const tr = document.createElement('tr');
+          const createdDate = d.createdAt ? new Date(d.createdAt).toLocaleString('ja-JP') : '不明';
+          tr.innerHTML = `
+            <td class="py-2.5">
+              <span class="text-slate-200 font-bold">${escapeHTML(d.displayName || 'GUEST')}</span>
+              <span class="block text-[9px] text-slate-500">${escapeHTML(d.easyId || d.uid || '')}</span>
+            </td>
+            <td class="py-2.5 text-slate-400">${escapeHTML(d.email || 'N/A')}</td>
+            <td class="py-2.5 text-slate-400">${createdDate}</td>
+            <td class="py-2.5 text-right text-cyan-400 font-bold font-mono">${d.totalStudyMinutes || 0}分</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error("Failed to load admin users: ", err);
+        tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-rose-400">読込エラー</td></tr>';
+      }
+    }
+
+    async function loadAdminLogs() {
+      const container = document.getElementById('admin-logs-container');
+      container.innerHTML = '<p class="text-slate-500 text-center py-4">読込中...</p>';
+
+      const logsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'admin_logs');
+      const q = query(logsColRef, orderBy('timestamp', 'desc'), limit(100));
+      try {
+        const snap = await getDocs(q);
+        container.innerHTML = '';
+        if (snap.empty) {
+          container.innerHTML = '<p class="text-slate-500 text-center py-4">操作ログはまだありません</p>';
+          return;
+        }
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const el = document.createElement('div');
+          const ts = d.timestamp ? new Date(d.timestamp).toLocaleString('ja-JP') : '';
+          
+          let actionColor = 'text-cyan-400';
+          if (d.actionType === 'DELETE_RECORD') actionColor = 'text-rose-400';
+          else if (d.actionType === 'LOGIN') actionColor = 'text-emerald-400';
+          else if (d.actionType === 'PROFILE_SETUP') actionColor = 'text-purple-400';
+          else if (d.actionType === 'FRIEND_REQUEST') actionColor = 'text-amber-400';
+
+          el.className = 'glass-panel rounded-xl p-3 border border-white/5';
+          el.innerHTML = `
+            <div class="flex justify-between items-start">
+              <div>
+                <span class="${actionColor} font-black text-[10px] uppercase">${escapeHTML(d.actionType || 'UNKNOWN')}</span>
+                <span class="text-slate-400 font-bold text-[10px] ml-2">${escapeHTML(d.userName || '?')} (${escapeHTML(d.easyId || '?')})</span>
+              </div>
+              <span class="text-[9px] text-slate-600 font-mono whitespace-nowrap">${ts}</span>
+            </div>
+            <p class="text-slate-300 text-[11px] mt-1">${escapeHTML(d.details || '')}</p>
+          `;
+          container.appendChild(el);
+        });
+      } catch (err) {
+        console.error("Failed to load admin logs: ", err);
+        container.innerHTML = '<p class="text-rose-400 text-center py-4">ログ読込エラー</p>';
+      }
+    }
+
+    // ============================================================
+    // 11. OS通知センター連携 (Web Notification API)
+    // ============================================================
+    const appLaunchTimestamp = Date.now();
+
+    async function requestNotificationPermission() {
+      if (!('Notification' in window)) {
+        console.warn("This browser does not support Notification API.");
+        return;
+      }
+      if (Notification.permission === 'default') {
+        try {
+          await Notification.requestPermission();
+        } catch (e) {
+          console.warn("Notification permission request failed:", e);
+        }
+      }
+    }
+
+    function sendSystemNotification(title, body, tag = 'studyflow') {
+      if (!('Notification' in window) || Notification.permission !== 'granted') return;
+
+      // Service Worker経由で通知を表示（バックグラウンドでも表示される）
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.ready.then(reg => {
+          reg.showNotification(title, {
+            body: body,
+            icon: 'https://cdn-icons-png.flaticon.com/512/2436/2436874.png',
+            badge: 'https://cdn-icons-png.flaticon.com/512/2436/2436874.png',
+            tag: tag,
+            renotify: true,
+            vibrate: [200, 100, 200]
+          });
+        });
+      } else {
+        // Service Workerがなければ通常のNotificationを使う
+        new Notification(title, {
+          body: body,
+          icon: 'https://cdn-icons-png.flaticon.com/512/2436/2436874.png',
+          tag: tag
+        });
+      }
+    }
+
+    // ============================================================
+    // 12. 友達申請システム (Friend Request System)
+    // ============================================================
+    let pendingFriendRequests = [];
+    let sentFriendRequests = [];
+
+    window.sendFriendRequest = async function() {
+      if (!currentUser) return;
+      const inputId = document.getElementById('friend-search-input').value.trim();
+      if (!inputId) return;
+
+      let targetUid = inputId;
+      let targetDisplayName = '';
+
+      // 1. easyIdsで逆引き
+      const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'easyIds', inputId);
+      try {
+        const easySnap = await getDoc(easyIdDocRef);
+        if (easySnap.exists()) {
+          targetUid = easySnap.data().uid;
+          targetDisplayName = easySnap.data().displayName;
+        }
+      } catch (err) {
+        console.error("Error looking up easyId: ", err);
+      }
+
+      if (targetUid === currentUser.uid) {
+        showToast("自分に友達申請を送ることはできません。");
+        return;
+      }
+
+      // 2. 存在確認
+      const targetProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetUid);
+      const snap = await getDoc(targetProfileRef);
+      if (!snap.exists()) {
+        showToast("ユーザーが見つかりません。IDを確認してください。");
+        return;
+      }
+      const targetData = snap.data();
+
+      // 既に友達なら弾く
+      if (friendsIdList.includes(targetUid)) {
+        showToast("すでに友達に追加されています。");
+        return;
+      }
+
+      // 3. 重複申請チェック
+      const requestsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'friend_requests');
+      const dupQ = query(requestsColRef, where('fromUid', '==', currentUser.uid), where('toUid', '==', targetUid), where('status', '==', 'pending'));
+      const dupSnap = await getDocs(dupQ);
+      if (!dupSnap.empty) {
+        showToast("すでに申請済みです。承認を待っています。");
+        return;
+      }
+
+      // 4. 申請ドキュメントを作成
+      const myName = document.getElementById('user-display-name').textContent || 'GUEST';
+      const myEasyId = document.getElementById('profile-uid-text').value || '';
+      await addDoc(requestsColRef, {
+        fromUid: currentUser.uid,
+        fromName: myName,
+        fromEasyId: myEasyId,
+        toUid: targetUid,
+        toName: targetData.displayName || 'GUEST',
+        status: 'pending',
+        timestamp: Date.now()
+      });
+
+      logAdminAction("FRIEND_REQUEST", `${targetData.displayName || 'GUEST'} に友達申請を送りました`);
+      showToast(`📩 「${targetData.displayName || 'GUEST'}」に友達申請を送りました！`);
+      document.getElementById('friend-search-input').value = '';
+    };
+
+    // 受信した申請を承認
+    window.acceptFriendRequest = async function(requestDocId, fromUid) {
+      if (!currentUser) return;
+
+      // 1. 自分の友達リストに追加
+      if (!friendsIdList.includes(fromUid)) {
+        const updatedList = [...friendsIdList, fromUid];
+        const friendsDocRef = doc(db, 'artifacts', appId, 'users', currentUser.uid, 'config', 'friends');
+        await setDoc(friendsDocRef, { list: updatedList }, { merge: true });
+      }
+
+      // 2. 申請のステータスを 'accepted' に更新
+      const reqDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'friend_requests', requestDocId);
+      await updateDoc(reqDocRef, { status: 'accepted' });
+
+      const fromProfile = globalProfiles[fromUid] || {};
+      logAdminAction("FRIEND_ACCEPT", `${fromProfile.displayName || fromUid} の友達申請を承認しました`);
+      showToast(`🎉 友達申請を承認しました！`);
+      renderFriendRequests();
+    };
+
+    // 受信した申請を拒否
+    window.rejectFriendRequest = async function(requestDocId) {
+      if (!currentUser) return;
+      const reqDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'friend_requests', requestDocId);
+      await updateDoc(reqDocRef, { status: 'rejected' });
+      showToast("友達申請を拒否しました。");
+      renderFriendRequests();
+    };
+
+    // 友達申請のリアルタイムリスナー
+    function startFriendRequestListeners(user) {
+      const requestsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'friend_requests');
+
+      // 受信した申請（pending）を購読
+      const incomingQ = query(requestsColRef, where('toUid', '==', user.uid), where('status', '==', 'pending'));
+      onSnapshot(incomingQ, (snapshot) => {
+        pendingFriendRequests = [];
+        snapshot.forEach(docSnap => {
+          pendingFriendRequests.push({ id: docSnap.id, ...docSnap.data() });
+        });
+
+        // 新着申請のOS通知
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'added') {
+            const d = change.doc.data();
+            if (d.timestamp > appLaunchTimestamp) {
+              sendSystemNotification(
+                '🤝 友達申請が届きました',
+                `${d.fromName || '誰か'}さんから友達申請が届きました！`,
+                `friend-req-${change.doc.id}`
+              );
+              showRealtimeToast(`🤝 ${d.fromName || '誰か'}さんから友達申請が届きました！`);
+            }
+          }
+        });
+
+        renderFriendRequests();
+      }, err => console.error("Friend request listener error:", err));
+
+      // 送信した申請の状態を購読（承認された場合に自動で友達追加）
+      const sentQ = query(requestsColRef, where('fromUid', '==', user.uid), where('status', '==', 'accepted'));
+      onSnapshot(sentQ, async (snapshot) => {
+        for (const change of snapshot.docChanges()) {
+          if (change.type === 'added') {
+            const d = change.doc.data();
+            // 自動で相手を友達リストに追加
+            if (!friendsIdList.includes(d.toUid)) {
+              const updatedList = [...friendsIdList, d.toUid];
+              const friendsDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'config', 'friends');
+              await setDoc(friendsDocRef, { list: updatedList }, { merge: true });
+              showToast(`🎉 「${d.toName || 'GUEST'}」が友達申請を承認しました！`);
+              sendSystemNotification(
+                '✅ 友達申請が承認されました',
+                `${d.toName || 'GUEST'}さんがあなたの友達申請を承認しました！`,
+                `friend-accept-${change.doc.id}`
+              );
+            }
+            // completedに更新
+            const reqDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'friend_requests', change.doc.id);
+            await updateDoc(reqDocRef, { status: 'completed' });
+          }
+        }
+      }, err => console.error("Sent request listener error:", err));
+    }
+
+    // 友達申請UIのレンダリング
+    function renderFriendRequests() {
+      const section = document.getElementById('friend-requests-section');
+      const container = document.getElementById('friend-requests-container');
+      const badge = document.getElementById('friend-request-badge');
+
+      if (pendingFriendRequests.length === 0) {
+        section.classList.add('hidden');
+        return;
+      }
+
+      section.classList.remove('hidden');
+      badge.textContent = pendingFriendRequests.length;
+      container.innerHTML = '';
+
+      pendingFriendRequests.forEach(req => {
+        const card = document.createElement('div');
+        card.className = 'glass-panel rounded-2xl p-4 flex justify-between items-center border border-amber-800/20 bg-amber-950/10';
+        card.innerHTML = `
+          <div class="flex items-center space-x-3 min-w-0">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-amber-500 to-orange-600 flex items-center justify-center font-black text-xs text-white flex-shrink-0">
+              ${(req.fromName || 'G').substring(0, 2).toUpperCase()}
+            </div>
+            <div class="min-w-0">
+              <span class="font-bold text-sm text-slate-200 block truncate">${escapeHTML(req.fromName || 'GUEST')}</span>
+              <span class="text-[9px] text-slate-500 font-bold">ID: ${escapeHTML(req.fromEasyId || req.fromUid)}</span>
+            </div>
+          </div>
+          <div class="flex items-center space-x-2 flex-shrink-0">
+            <button onclick="acceptFriendRequest('${req.id}', '${req.fromUid}')" class="px-3 py-2 rounded-xl bg-emerald-950 hover:bg-emerald-900 border border-emerald-800/40 text-emerald-400 text-xs font-black transition active:scale-95">承認</button>
+            <button onclick="rejectFriendRequest('${req.id}')" class="px-3 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-500 text-xs font-black transition active:scale-95">拒否</button>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+      lucide.createIcons();
+    }
+
+    // ============================================================
+    // 13. チャット新着メッセージのOS通知
+    // ============================================================
+    function setupChatNotificationListener(user) {
+      const messagesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
+
+      // 全メッセージを購読し、自分宛ての新着をOS通知する
+      onSnapshot(messagesColRef, (snapshot) => {
+        snapshot.docChanges().forEach(change => {
+          if (change.type === 'added') {
+            const msg = change.doc.data();
+            // 自分宛て、かつアプリ起動後のメッセージのみ通知
+            if (msg.receiverId === user.uid && msg.timestamp > appLaunchTimestamp) {
+              // 現在開いているチャット相手からのメッセージは通知しない
+              if (activeChatFriendId !== msg.senderId) {
+                const senderProfile = globalProfiles[msg.senderId] || {};
+                const senderName = senderProfile.displayName || '友達';
+                sendSystemNotification(
+                  `💬 ${senderName}`,
+                  msg.text.length > 50 ? msg.text.substring(0, 50) + '...' : msg.text,
+                  `chat-${msg.senderId}`
+                );
+                showRealtimeToast(`💬 ${senderName}: ${msg.text.length > 40 ? msg.text.substring(0, 40) + '...' : msg.text}`);
+              }
+            }
+          }
+        });
+      }, err => console.error("Chat notification listener error:", err));
+    }
+
+    // ============================================================
+    // 14. 通知許可のリクエストとService Worker登録
+    // ============================================================
+    (async function initNotifications() {
+      // Service Workerの登録
+      if ('serviceWorker' in navigator) {
+        try {
+          await navigator.serviceWorker.register('./sw.js');
+          console.log("Service Worker registered with relative path.");
+        } catch (e) {
+          console.warn("Service Worker registration failed:", e);
+        }
+      }
+      // 通知許可をリクエスト
+      requestNotificationPermission();
+    })();
+
+    // Enterキーのイベントリスナー設定
+    document.getElementById('chat-input-text').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        sendChatMessage();
+      }
+    });
+
+    document.getElementById('friend-search-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        sendFriendRequest();
+      }
+    });
+
+    // startRealtimeSync にフック: 友達申請リスナーとチャット通知リスナーを追加
+    const _originalStartRealtimeSync = startRealtimeSync;
+    startRealtimeSync = function(user) {
+      _originalStartRealtimeSync(user);
+      startFriendRequestListeners(user);
+      setupChatNotificationListener(user);
+    };
+
   </script>
 </body>
 </html>

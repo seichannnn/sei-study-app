@@ -1,44 +1,47 @@
-const CACHE_NAME = 'studyflow-v6';
-const ASSETS_TO_CACHE = [
-  'index.html',
-  'manifest.json',
-  'https://cdn.tailwindcss.com',
-  'https://unpkg.com/lucide@latest'
-];
+// StudyFlow Service Worker - 通知クリックハンドラ & オフライン対応
+const CACHE_NAME = 'studyflow-v1';
 
+// Install: キャッシュは最小限に
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(ASSETS_TO_CACHE);
-    })
-  );
   self.skipWaiting();
 });
 
+// Activate: 古いキャッシュを削除
 self.addEventListener('activate', (event) => {
-  event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            return caches.delete(cache);
-          }
-        })
-      );
-    })
-  );
-  self.clients.claim();
+  event.waitUntil(clients.claim());
 });
 
-self.addEventListener('fetch', (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        return cachedResponse;
+// 通知がクリックされたとき
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  // アプリのウィンドウを探してフォーカスする、なければ開く
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // 既に開いているタブがあればフォーカスする
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          return client.focus();
+        }
       }
-      return fetch(event.request).catch(() => {
-        return caches.match('index.html');
-      });
+      // タブがなければ新しく開く
+      if (clients.openWindow) {
+        return clients.openWindow('/');
+      }
     })
+  );
+});
+
+// Fetch: ネットワーク優先（オフラインフォールバック）
+self.addEventListener('fetch', (event) => {
+  // Firebase系、外部CDN、analytics は通さない
+  if (event.request.url.includes('firebaseio.com') ||
+      event.request.url.includes('googleapis.com') ||
+      event.request.url.includes('gstatic.com')) {
+    return;
+  }
+  
+  event.respondWith(
+    fetch(event.request).catch(() => caches.match(event.request))
   );
 });
