@@ -107,6 +107,29 @@
       <p id="auth-loading-text" class="text-xs font-bold tracking-widest text-cyan-400 uppercase">PROCESSING...</p>
     </div>
 
+    <!-- ポップアップブロック警告モーダル -->
+    <div id="popup-blocked-modal" class="absolute inset-0 bg-cyberdark/90 backdrop-blur-md z-30 flex items-center justify-center hidden px-6">
+      <div class="glass-panel w-full max-w-sm rounded-3xl p-6 space-y-4 border border-rose-500/30 text-center shadow-glass">
+        <div class="inline-flex p-3 rounded-full bg-rose-500/10 text-rose-400">
+          <i data-lucide="lock" class="w-8 h-8 animate-bounce"></i>
+        </div>
+        <h3 class="text-lg font-black tracking-wider text-rose-400">ポップアップが制限されました</h3>
+        <p class="text-xs text-slate-300 leading-relaxed text-left">
+          お使いのブラウザによってGoogleのサインイン画面が自動的に閉じられました。<br><br>
+          <strong>解決方法:</strong><br>
+          ブラウザのアドレスバーの右端に表示されている「ポップアップブロック」のマークをクリックし、<strong>「StudyFlowでのポップアップを常に許可」</strong>を選択してもう一度お試しください。
+        </p>
+        <div class="space-y-2 pt-2">
+          <button onclick="closePopupBlockedModal()" class="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl text-xs tracking-wider transition active:scale-95">
+            了解しました
+          </button>
+          <button onclick="loginAsGuestFromModal()" class="w-full bg-gradient-to-r from-cyan-500 to-purple-600 text-white font-bold py-3 rounded-xl text-xs tracking-wider transition active:scale-95">
+            今回はゲストとしてログイン
+          </button>
+        </div>
+      </div>
+    </div>
+
     <div class="w-full max-w-sm text-center space-y-8 z-10">
       <div class="space-y-3">
         <div class="inline-flex p-4 rounded-3xl bg-white/5 border border-white/10 shadow-neon-blue">
@@ -492,7 +515,7 @@
   <script type="module">
     // Firebase Modular imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // 1. 環境変数のセットアップ (ユーザーから提供された最新の firebaseConfig)
@@ -558,11 +581,6 @@
       }
     };
 
-    // PWA（ホーム画面追加状態）として起動されているかの検知
-    const isStandalonePWA = () => {
-      return window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches;
-    };
-
     // ローディング表示用コントロール
     const showAuthLoading = (show, text = "PROCESSING...") => {
       const overlay = document.getElementById('auth-loading-overlay');
@@ -577,6 +595,31 @@
       }
     };
 
+    // ポップアップブロック用モーダルの開閉
+    window.closePopupBlockedModal = () => {
+      const modal = document.getElementById('popup-blocked-modal');
+      if (modal) modal.classList.add('hidden');
+    };
+
+    const showPopupBlockedModal = () => {
+      const modal = document.getElementById('popup-blocked-modal');
+      if (modal) modal.classList.remove('hidden');
+    };
+
+    window.loginAsGuestFromModal = async () => {
+      window.closePopupBlockedModal();
+      try {
+        showAuthLoading(true, "ゲストログインを作成しています...");
+        await signInAnonymously(auth);
+        showToast("ゲストとしてログインしました");
+      } catch (err) {
+        console.error("Guest login error: ", err);
+        showToast("ログインに失敗しました");
+      } finally {
+        showAuthLoading(false);
+      }
+    };
+
     // 起動時の初期化
     window.addEventListener('load', async () => {
       lucide.createIcons();
@@ -584,42 +627,8 @@
       applySettingsToTimer();
       syncSubjectDisplay();
 
-      // リダイレクトによるサインイン結果の回収処理（リダイレクト経由でのGoogleサインイン成功判定）
-      // 「リダイレクト認証フラグ」が保存されている場合、またはリダイレクト復帰直後と判断されるとき
-      const isRedirectInProgress = localStorage.getItem('auth_redirect_in_progress') === 'true';
-
-      if (!isIframeEnvironment() && (isRedirectInProgress || window.location.hash || window.location.search.includes('code='))) {
-        showAuthLoading(true, "Googleアカウントと安全に連携しています...");
-        try {
-          const result = await getRedirectResult(auth);
-          localStorage.removeItem('auth_redirect_in_progress'); // 完了したのでフラグクリア
-          if (result && result.user) {
-            showToast("Googleログインに成功しました！");
-            currentUser = result.user;
-            await syncUserProfile(result.user);
-            startRealtimeSync(result.user);
-          }
-        } catch (redirectErr) {
-          console.error("Redirect Auth Error: ", redirectErr);
-          localStorage.removeItem('auth_redirect_in_progress'); // エラーでもクリア
-          if (redirectErr.code === 'auth/unauthorized-domain') {
-            const currentHost = window.location.hostname;
-            showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
-          } else {
-            showToast("サインインの処理中にエラーが発生しました。");
-          }
-        } finally {
-          showAuthLoading(false);
-        }
-      }
-
       // RULE 3: Firestoreの全クエリを実行する前に、まず確実にAuthトークン（または匿名）でsignInを完了させる
       const initAuth = async () => {
-        // リダイレクト認証の結果が未確定な間は、起動時の余計な匿名ログインや状態の上書きを一時停止（ロック）します。
-        if (localStorage.getItem('auth_redirect_in_progress') === 'true') {
-          return; 
-        }
-
         try {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             await signInWithCustomToken(auth, __initial_auth_token);
@@ -645,11 +654,6 @@
 
       // Firebase Auth Listener（サインインが完了するとここが走り出す）
       onAuthStateChanged(auth, async (user) => {
-        // リダイレクト処理の途中であればAuthリスナー側でも競合を防ぐために処理を一時休止します
-        if (localStorage.getItem('auth_redirect_in_progress') === 'true') {
-          return;
-        }
-
         if (user) {
           currentUser = user;
           authScreen.classList.add('hidden');
@@ -671,36 +675,45 @@
       });
     });
 
-    // 3. 認証制御 (RULE 3 & モバイル/PWA環境下での100%バグ回避ログイン制御)
-    btnGoogleLogin.addEventListener('click', async () => {
-      // 1. iframe内（Canvas等）の早期検知
+    // 3. 認証制御 (RULE 3 & Pop-up Blocked 100% Fixed with Synchronous Event Handler)
+    // イベントリスナーを async にしないことで、ブラウザが「ユーザーの直接操作ではない」とみなしてブロックするのを防ぎます
+    btnGoogleLogin.addEventListener('click', (e) => {
+      e.preventDefault();
+
+      // 1. iframe内（Canvasのプレビュー画面など）の早期検知
       if (isIframeEnvironment()) {
         showToast("プレビュー環境制限のため、自動でゲストログインを開始します");
-        signInAnonymously(auth).catch((e) => console.error("Anonymous auth failed: ", e));
+        signInAnonymously(auth).catch((err) => console.error("Anonymous auth failed: ", err));
         return;
       }
 
-      // WindowsPC（ブラウザ）でもスマホでも、Googleログイン時のポップアップブロックによる不具合を完璧に排除するため、
-      // 動作の安定したリダイレクト認証（signInWithRedirect）を標準ログイン処理に決定しました！
-      try {
-        showAuthLoading(true, "安全なGoogleログインページへ移動しています...");
-        // 他の自動非同期ログインとバッティングしないように保護フラグをオンにする
-        localStorage.setItem('auth_redirect_in_progress', 'true');
-        await signInWithRedirect(auth, googleProvider);
-      } catch (err) {
-        console.error("Google sign in with redirect failed: ", err);
-        localStorage.removeItem('auth_redirect_in_progress');
-        showAuthLoading(false);
-        showToast("エラーのためゲストログインを試みます。");
-        setTimeout(async () => {
-          try {
-            await signInAnonymously(auth);
-          } catch (subErr) {
-            console.error("Fallback anonymous auth failed: ", subErr);
-            showToast("ログインエラーが発生しました。");
+      // 2. イベントハンドラーの先頭で「遅延なく完全に同期的」に signInWithPopup を即座に開始。
+      // これにより、Windows/MacのChrome, Edge, Safariなどの全ブラウザで「ポップアップブロック」を完璧に回避します！
+      showAuthLoading(true, "Googleアカウントと連携しています...");
+      signInWithPopup(auth, googleProvider)
+        .then(async (result) => {
+          if (result && result.user) {
+            showToast("Googleログインに成功しました！");
+            currentUser = result.user;
+            await syncUserProfile(result.user);
+            startRealtimeSync(result.user);
           }
-        }, 1000);
-      }
+        })
+        .catch((err) => {
+          console.error("Popup Auth Error: ", err);
+          if (err.code === 'auth/popup-blocked') {
+            // ポップアップが制限された場合、親切な案内モーダルをシームレスに開く
+            showPopupBlockedModal();
+          } else if (err.code === 'auth/unauthorized-domain') {
+            const currentHost = window.location.hostname;
+            showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
+          } else {
+            showToast("サインインの処理中にエラーが発生しました。");
+          }
+        })
+        .finally(() => {
+          showAuthLoading(false);
+        });
     });
 
     btnGuestLogin.addEventListener('click', async () => {
@@ -723,7 +736,6 @@
         currentUser = null;
         authScreen.classList.remove('hidden');
         appScreen.classList.add('hidden');
-        localStorage.removeItem('auth_redirect_in_progress');
         location.reload();
       } catch (err) {
         console.error("Signout error: ", err);
