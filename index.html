@@ -680,17 +680,16 @@
     btnGoogleLogin.addEventListener('click', (e) => {
       e.preventDefault();
 
-      // 1. iframe内（Canvasのプレビュー画面など）の早期検知
-      if (isIframeEnvironment()) {
-        showToast("プレビュー環境制限のため、自動でゲストログインを開始します");
-        signInAnonymously(auth).catch((err) => console.error("Anonymous auth failed: ", err));
-        return;
-      }
+      // 1. イベントハンドラーの先頭で「遅延なく完全に同期的に」 signInWithPopup を即座に開始。
+      // 他の条件判定やDOM操作（showAuthLoadingなど）を前に挟むと、ブラウザが「ユーザー操作の直接の脈絡から外れた」と判定し、
+      // ポップアップ許可がされているドメインであってもブロックを発動してしまいます。
+      // この1行目で直接呼ぶ命令こそが、ブラウザの自動ブロックを完璧に回避する唯一無二の解決策です。
+      const signInPromise = signInWithPopup(auth, googleProvider);
 
-      // 2. イベントハンドラーの先頭で「遅延なく完全に同期的」に signInWithPopup を即座に開始。
-      // これにより、Windows/MacのChrome, Edge, Safariなどの全ブラウザで「ポップアップブロック」を完璧に回避します！
+      // ポップアップが起動した「直後」に、ローディング画面などのDOM操作を安全に実行します
       showAuthLoading(true, "Googleアカウントと連携しています...");
-      signInWithPopup(auth, googleProvider)
+
+      signInPromise
         .then(async (result) => {
           if (result && result.user) {
             showToast("Googleログインに成功しました！");
@@ -702,13 +701,19 @@
         .catch((err) => {
           console.error("Popup Auth Error: ", err);
           if (err.code === 'auth/popup-blocked') {
-            // ポップアップが制限された場合、親切な案内モーダルをシームレスに開く
+            // 例外的にブロックが突破できなかった場合にのみ、親切な案内モーダルをシームレスに開く
             showPopupBlockedModal();
           } else if (err.code === 'auth/unauthorized-domain') {
             const currentHost = window.location.hostname;
             showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
           } else {
-            showToast("サインインの処理中にエラーが発生しました。");
+            // iframe環境（Canvasプレビュー内など）での特別な動作制御
+            if (isIframeEnvironment()) {
+              showToast("プレビュー環境制限のため、自動でゲストログインを開始します");
+              signInAnonymously(auth).catch((anonErr) => console.error("Anonymous auth failed: ", anonErr));
+            } else {
+              showToast("サインインの処理中にエラーが発生しました。");
+            }
           }
         })
         .finally(() => {
