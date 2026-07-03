@@ -101,6 +101,12 @@
     <!-- 輝く巨大バックライト -->
     <div class="absolute w-80 h-80 bg-gradient-to-tr from-cyan-500/20 to-purple-600/20 rounded-full blur-3xl -z-10"></div>
     
+    <!-- ローディングオーバーレイ (リダイレクト認証の回収待機中に表示) -->
+    <div id="auth-loading-overlay" class="absolute inset-0 bg-cyberdark/90 backdrop-blur-sm z-20 flex flex-col justify-center items-center space-y-4 hidden">
+      <div class="w-12 h-12 rounded-full border-4 border-cyan-500/20 border-t-cyan-400 animate-spin"></div>
+      <p id="auth-loading-text" class="text-xs font-bold tracking-widest text-cyan-400 uppercase">PROCESSING...</p>
+    </div>
+
     <div class="w-full max-w-sm text-center space-y-8 z-10">
       <div class="space-y-3">
         <div class="inline-flex p-4 rounded-3xl bg-white/5 border border-white/10 shadow-neon-blue">
@@ -552,6 +558,20 @@
       }
     };
 
+    // ローディング表示用コントロール
+    const showAuthLoading = (show, text = "PROCESSING...") => {
+      const overlay = document.getElementById('auth-loading-overlay');
+      const textEl = document.getElementById('auth-loading-text');
+      if (overlay) {
+        if (show) {
+          textEl.textContent = text;
+          overlay.classList.remove('hidden');
+        } else {
+          overlay.classList.add('hidden');
+        }
+      }
+    };
+
     // 起動時の初期化
     window.addEventListener('load', async () => {
       lucide.createIcons();
@@ -559,20 +579,27 @@
       applySettingsToTimer();
       syncSubjectDisplay();
 
-      // リダイレクトによるサインイン結果の回収処理を追加（リダイレクト経由でのGoogleサインイン成功判定）
+      // リダイレクトによるサインイン結果の回収処理（リダイレクト経由でのGoogleサインイン成功判定）
       if (!isIframeEnvironment()) {
+        showAuthLoading(true, "Googleアカウントと連携しています...");
         try {
           const result = await getRedirectResult(auth);
           if (result && result.user) {
             showToast("Googleログインに成功しました！");
+            currentUser = result.user;
+            await syncUserProfile(result.user);
+            startRealtimeSync(result.user);
           }
         } catch (redirectErr) {
           console.error("Redirect Auth Error: ", redirectErr);
           if (redirectErr.code === 'auth/unauthorized-domain') {
-            showToast("ドメインエラー: FirebaseにこのVercelドメインが承認されていません。");
+            const currentHost = window.location.hostname;
+            showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
           } else {
             showToast("サインインの処理中にエラーが発生しました。");
           }
+        } finally {
+          showAuthLoading(false);
         }
       }
 
@@ -643,10 +670,11 @@
 
       // モバイルブラウザやポップアップブロックを完璧に回避するため、リダイレクトサインインを優先起動
       try {
-        showToast("Googleログイン中...");
+        showAuthLoading(true, "Googleのログインページに移動しています...");
         await signInWithRedirect(auth, googleProvider);
       } catch (err) {
         console.error("Google sign in with redirect failed: ", err);
+        showAuthLoading(false);
         showToast("エラーのためゲストログインを試みます。");
         setTimeout(async () => {
           try {
@@ -661,11 +689,14 @@
 
     btnGuestLogin.addEventListener('click', async () => {
       try {
+        showAuthLoading(true, "ゲストログインを作成しています...");
         await signInAnonymously(auth);
         showToast("ゲストとしてログインしました");
       } catch (err) {
         console.error("Guest login error: ", err);
         showToast("ログインに失敗しました");
+      } finally {
+        showAuthLoading(false);
       }
     });
 
@@ -1324,7 +1355,7 @@
 
       addRecord(subject, duration, memo);
       closeAddModal();
-      showToast(`💪 記録追加: ${subject} (${duration}分)`);
+      showToast("💪 記録追加: " + subject + " (" + duration + "分)");
       
       renderStats();
       document.getElementById('modal-duration').value = '30';
