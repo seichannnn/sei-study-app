@@ -486,7 +486,7 @@
   <script type="module">
     // Firebase Modular imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // 1. 環境変数のセットアップ (ユーザーから提供された最新の firebaseConfig)
@@ -512,7 +512,7 @@
     let currentUser = null;
     let friendsIdList = []; // 友達登録されているUIDリスト
     let globalProfiles = {}; // 全ユーザーのキャッシュデータ（ランキング、チャット相手情報）
-    let activeChatFriendId = null; // 現在チャット中の友達のUID
+    let activeChatFriendId = null; // 現在チャット中の友達 of UID
     let friendsActiveStatuses = {}; // 友達の勉強状態を監視するためのキャッシュ
 
     let timerInterval = null;
@@ -558,6 +558,23 @@
       loadLocalState();
       applySettingsToTimer();
       syncSubjectDisplay();
+
+      // リダイレクトによるサインイン結果の回収処理を追加（リダイレクト経由でのGoogleサインイン成功判定）
+      if (!isIframeEnvironment()) {
+        try {
+          const result = await getRedirectResult(auth);
+          if (result && result.user) {
+            showToast("Googleログインに成功しました！");
+          }
+        } catch (redirectErr) {
+          console.error("Redirect Auth Error: ", redirectErr);
+          if (redirectErr.code === 'auth/unauthorized-domain') {
+            showToast("ドメインエラー: FirebaseにこのVercelドメインが承認されていません。");
+          } else {
+            showToast("サインインの処理中にエラーが発生しました。");
+          }
+        }
+      }
 
       // RULE 3: Firestoreの全クエリを実行する前に、まず確実にAuthトークン（または匿名）でsignInを完了させる
       const initAuth = async () => {
@@ -608,11 +625,11 @@
       });
     });
 
-    // 3. 認証制御 (RULE 3 & Iframe/Cancelled-Popup Fix)
+    // 3. 認証制御 (RULE 3 & Pop-up Blocked Fixed with Redirect Auth)
     btnGoogleLogin.addEventListener('click', async () => {
       // 1. iframe内、またはポップアップの許可されないサンドボックス環境の早期検知
       if (isIframeEnvironment()) {
-        showToast("プレビュー環境制限のため、自動でゲストログインを開始します（デプロイ後にGoogleログインが利用可能です）");
+        showToast("プレビュー環境制限のため、自動でゲストログインを開始します");
         setTimeout(async () => {
           try {
             await signInAnonymously(auth);
@@ -624,22 +641,21 @@
         return;
       }
 
+      // モバイルブラウザやポップアップブロックを完璧に回避するため、リダイレクトサインインを優先起動
       try {
-        await signInWithPopup(auth, googleProvider);
-        showToast("Googleログインしました！");
+        showToast("Googleログイン中...");
+        await signInWithRedirect(auth, googleProvider);
       } catch (err) {
-        console.error("Popup blocked or auth error. Falling back to anonymous...", err);
-        
-        // 2. "Pending promise was never set" を回避するため、非同期タスクを遅延(setTimeout)させてから実行
+        console.error("Google sign in with redirect failed: ", err);
+        showToast("エラーのためゲストログインを試みます。");
         setTimeout(async () => {
           try {
             await signInAnonymously(auth);
-            showToast("ゲスト（匿名ログイン）として開始しました（Googleログイン制限のため）");
           } catch (subErr) {
             console.error("Fallback anonymous auth failed: ", subErr);
             showToast("ログインエラーが発生しました。");
           }
-        }, 600);
+        }, 1000);
       }
     });
 
