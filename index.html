@@ -423,7 +423,7 @@
 
       <!-- ================= 4. 設定タブ ================= -->
       <div id="tab-settings" class="tab-content hidden space-y-6">
-        <h2 class="text-base font-black tracking-wider text-slate-300 uppercase mb-2">⚙️ PREFERENCES</h2>
+        <h2 id="settings-title-header" onclick="triggerAdminCheat()" class="text-base font-black tracking-wider text-slate-300 uppercase mb-2 cursor-pointer select-none">⚙️ PREFERENCES</h2>
         
         <!-- プロフィール設定 -->
         <div class="glass-panel rounded-2xl p-5 shadow-glass space-y-4">
@@ -2421,6 +2421,44 @@
 
       sendSystemNotification("テスト通知 🎯", "通知は正常に機能しています！今日の学習も頑張りましょう！");
       showToast("🔔 テスト通知を送信しました！");
+    };
+
+    // デバッグ用: 管理者権限を強制有効化する隠し機能（5回連続クリック）
+    let adminClickCount = 0;
+    let adminClickTimeout = null;
+    window.triggerAdminCheat = async function() {
+      if (!currentUser) return;
+      
+      adminClickCount++;
+      clearTimeout(adminClickTimeout);
+      
+      if (adminClickCount >= 5) {
+        adminClickCount = 0;
+        showToast("🛡️ 管理者権限をリクエスト中...");
+        
+        try {
+          // Firestoreのユーザープロフィールを更新してisAdminを直接付与
+          const profileDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', currentUser.uid);
+          await setDoc(profileDocRef, {
+            isAdmin: true
+          }, { merge: true });
+
+          // ログ書き込み
+          await logAdminAction("ADMIN_ACTIVATE", "隠しコマンドにより管理者権限が有効化されました");
+          
+          showToast("🎉 管理者権限（Admin）が有効になりました！タブを確認してください。");
+          
+          // 再同期してADMINタブを表示させる
+          await syncUserProfile(currentUser);
+        } catch (err) {
+          console.error("Failed to cheat admin: ", err);
+          showToast("管理者権限の有効化に失敗しました。");
+        }
+      } else {
+        adminClickTimeout = setTimeout(() => {
+          adminClickCount = 0;
+        }, 2000);
+      }
     };
 
     // Enterキーのイベントリスナー設定
