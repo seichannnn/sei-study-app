@@ -95,8 +95,23 @@
 </head>
 <body class="text-gray-100 font-sans min-h-screen flex flex-col justify-between overflow-hidden bg-cyberdark bg-grid">
 
+  <!-- ================= SPLASH/INITIAL LOADING SCREEN ================= -->
+  <div id="splash-screen" class="fixed inset-0 z-[100] flex flex-col justify-center items-center px-6 bg-cyberdark">
+    <div class="absolute inset-0 bg-grid opacity-30"></div>
+    <div class="absolute w-80 h-80 bg-gradient-to-tr from-cyan-500/20 to-purple-600/20 rounded-full blur-3xl"></div>
+    <div class="text-center space-y-6 z-10 flex flex-col items-center">
+      <div class="inline-flex p-4 rounded-3xl bg-white/5 border border-white/10 shadow-neon-blue animate-pulse">
+        <i data-lucide="sparkles" class="w-12 h-12 text-cyan-400"></i>
+      </div>
+      <div class="space-y-2">
+        <h1 class="text-3xl font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-300 to-purple-500 bg-clip-text text-transparent">STUDYFLOW PRO</h1>
+        <p class="text-xs text-cyan-400/80 font-bold tracking-widest uppercase animate-pulse">Initializing System...</p>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= AUTH SCREEN ================= -->
-  <div id="auth-screen" class="fixed inset-0 z-50 flex flex-col justify-center items-center px-6 bg-cyberdark/95 backdrop-blur-md">
+  <div id="auth-screen" class="fixed inset-0 z-50 flex flex-col justify-center items-center px-6 bg-cyberdark/95 backdrop-blur-md hidden">
     <div class="absolute inset-0 bg-grid opacity-30"></div>
     <!-- 輝く巨大バックライト -->
     <div class="absolute w-80 h-80 bg-gradient-to-tr from-cyan-500/20 to-purple-600/20 rounded-full blur-3xl -z-10"></div>
@@ -216,12 +231,12 @@
           <label class="block text-[10px] tracking-widest uppercase text-slate-400 mb-2 font-bold">🎯 TARGET SUBJECT</label>
           <div class="relative">
             <select id="timer-subject" class="w-full glass-input rounded-xl px-4 py-3.5 text-sm focus:outline-none appearance-none text-slate-100 font-medium">
-              <option value="英語">🇬🇧 ENGLISH / 英語</option>
-              <option value="数学">📐 MATH / 数学</option>
-              <option value="国語">📚 JAPANESE / 国語</option>
-              <option value="理科">🧪 SCIENCE / 理科</option>
-              <option value="社会">🌍 SOCIAL / 社会</option>
-              <option value="その他">✏️ OTHER / その他</option>
+              <option value="英語">🇬🇧 英語</option>
+              <option value="数学">📐 数学</option>
+              <option value="国語">📚 国語</option>
+              <option value="理科">🧪 理科</option>
+              <option value="社会">🌍 社会</option>
+              <option value="その他">✏️ その他</option>
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-cyan-400">
               <i data-lucide="chevron-down" class="w-4 h-4"></i>
@@ -515,7 +530,7 @@
   <script type="module">
     // Firebase Modular imports
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getAuth, signInWithCustomToken, signInAnonymously, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
     // 1. 環境変数のセットアップ (ユーザーから提供された最新の firebaseConfig)
@@ -627,17 +642,67 @@
       applySettingsToTimer();
       syncSubjectDisplay();
 
+      let redirectChecked = false;
+      let authStateChecked = false;
+      let loggedInUser = null;
+
+      // 初期化処理がすべて終わった段階でスプラッシュ画面を消す
+      const checkInitComplete = () => {
+        if (redirectChecked && authStateChecked) {
+          const splash = document.getElementById('splash-screen');
+          if (splash) splash.classList.add('hidden');
+
+          if (loggedInUser) {
+            authScreen.classList.add('hidden');
+            appScreen.classList.remove('hidden');
+          } else {
+            authScreen.classList.remove('hidden');
+            appScreen.classList.add('hidden');
+          }
+        }
+      };
+
+      // 1. Googleリダイレクト認証から戻ってきた結果の回収 (ポップアップブロックを完全に回避)
+      const handleRedirect = async () => {
+        if (!isIframeEnvironment()) {
+          try {
+            const result = await getRedirectResult(auth);
+            if (result && result.user) {
+              loggedInUser = result.user;
+              showToast("Googleログインに成功しました！");
+            }
+          } catch (redirectErr) {
+            console.error("Redirect Auth Error: ", redirectErr);
+            if (redirectErr.code === 'auth/unauthorized-domain') {
+              const currentHost = window.location.hostname;
+              showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
+            } else {
+              showToast("サインインの処理中にエラーが発生しました。");
+            }
+          }
+        }
+        redirectChecked = true;
+        checkInitComplete();
+      };
+
+      // リダイレクト回収処理を開始
+      await handleRedirect();
+
       // RULE 3: Firestoreの全クエリを実行する前に、まず確実にAuthトークン（または匿名）でsignInを完了させる
       const initAuth = async () => {
+        // もしリダイレクト結果から既にユーザーが検知されている場合は初期匿名化は走りません
+        if (loggedInUser) {
+          authStateChecked = true;
+          checkInitComplete();
+          return;
+        }
+
         try {
           if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
             await signInWithCustomToken(auth, __initial_auth_token);
           } else if (isIframeEnvironment()) {
             // Canvasプレビュー環境（iframe）のみ、セキュリティルール保護のため自動で匿名サインインを行います
             await signInAnonymously(auth);
-          } else {
-            // Vercelなどの本番環境（非iframe）では、勝手に自動ログイン（匿名）は行いません。
-            // ログイン済みの既存セッションがあれば onAuthStateChanged が自動的に検知してアプリを開きます。
           }
         } catch (e) {
           console.error("Initial auth failed. Retrying anonymously...", e);
@@ -647,17 +712,17 @@
             console.error("Critical: Fallback auth failed.", retryErr);
           }
         }
+        authStateChecked = true;
+        checkInitComplete();
       };
 
-      // 認証の初期シーケンスを最優先で完了させる
       await initAuth();
 
       // Firebase Auth Listener（サインインが完了するとここが走り出す）
       onAuthStateChanged(auth, async (user) => {
         if (user) {
           currentUser = user;
-          authScreen.classList.add('hidden');
-          appScreen.classList.remove('hidden');
+          loggedInUser = user;
           
           document.getElementById('user-display-name').textContent = user.displayName || 'GUEST';
           document.getElementById('profile-display-name').value = user.displayName || 'GUEST';
@@ -669,55 +734,39 @@
           startRealtimeSync(user);
         } else {
           currentUser = null;
-          authScreen.classList.remove('hidden');
-          appScreen.classList.add('hidden');
+          loggedInUser = null;
         }
+        
+        // 起動時の初期化フェーズを解決
+        authStateChecked = true;
+        checkInitComplete();
       });
     });
 
-    // 3. 認証制御 (RULE 3 & Pop-up Blocked 100% Fixed with Synchronous Event Handler)
-    // イベントリスナーを async にしないことで、ブラウザが「ユーザーの直接操作ではない」とみなしてブロックするのを防ぎます
+    // 3. 認証制御 (RULE 3 & Pop-up Blocked 100% Fixed with Redirect Auth)
     window.startGoogleLogin = function(e) {
       if (e) e.preventDefault();
 
-      // ポップアップを「ボタンが押された瞬間のスレッド」で直接同期的にトリガーします。
-      // この関数の先頭に別の変数定義や処理が挟まると、ブラウザが「自動ポップアップ」と判定し、
-      // 許可状態であっても強制ブロックを発動します。
-      // これを1行目に配置することが、Windowsの各種ブラウザでブロックを完璧に回避する唯一の方法です。
-      const signInPromise = signInWithPopup(auth, googleProvider);
+      // 1. iframe内（Canvasのプレビュー画面など）の早期検知
+      if (isIframeEnvironment()) {
+        showToast("プレビュー環境制限のため、自動でゲストログインを開始します");
+        signInAnonymously(auth).catch((anonErr) => console.error("Anonymous auth failed: ", anonErr));
+        return;
+      }
 
-      // ポップアップが立ち上がった直後、安全にローディング表示を挟みます。
-      showAuthLoading(true, "Googleアカウントと連携しています...");
+      // Windows、スマホに関わらず、一切のポップアップブロックに悩まされないため、
+      // ログインページへの安全な「リダイレクト方式 (signInWithRedirect)」を起動します。
+      showAuthLoading(true, "安全なGoogleログインページへ移動しています...");
+      
+      // 次の初期化フェーズで匿名とバッティングしないようフラグ（リダイレクト中）を明示
+      localStorage.setItem('auth_redirect_in_progress', 'true');
 
-      signInPromise
-        .then(async (result) => {
-          if (result && result.user) {
-            showToast("Googleログインに成功しました！");
-            currentUser = result.user;
-            await syncUserProfile(result.user);
-            startRealtimeSync(result.user);
-          }
-        })
+      signInWithRedirect(auth, googleProvider)
         .catch((err) => {
-          console.error("Popup Auth Error: ", err);
-          if (err.code === 'auth/popup-blocked') {
-            // 例外的にブロックが突破できなかった場合にのみ、親切な案内モーダルをシームレスに開く
-            showPopupBlockedModal();
-          } else if (err.code === 'auth/unauthorized-domain') {
-            const currentHost = window.location.hostname;
-            showToast(`ドメイン未登録エラー: Firebaseに「${currentHost}」を承認済みドメインとして登録してください。`);
-          } else {
-            // iframe環境（Canvasプレビュー内など）での特別な動作制御
-            if (isIframeEnvironment()) {
-              showToast("プレビュー環境制限のため、自動でゲストログインを開始します");
-              signInAnonymously(auth).catch((anonErr) => console.error("Anonymous auth failed: ", anonErr));
-            } else {
-              showToast("サインインの処理中にエラーが発生しました。");
-            }
-          }
-        })
-        .finally(() => {
+          console.error("Redirect Sign In Error: ", err);
+          localStorage.removeItem('auth_redirect_in_progress');
           showAuthLoading(false);
+          showToast("サインインの処理中にエラーが発生しました。");
         });
     };
 
@@ -741,6 +790,7 @@
         currentUser = null;
         authScreen.classList.remove('hidden');
         appScreen.classList.add('hidden');
+        localStorage.removeItem('auth_redirect_in_progress');
         location.reload();
       } catch (err) {
         console.error("Signout error: ", err);
@@ -820,7 +870,7 @@
 
       // C. パブリックメッセージ監視 (チャットルーム用)
       const messagesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
-      // RULE 2: 複合インデックスを避けるため、全メッセージをシンプルに購読し、メモリ上でソートとフィルタを行う
+      // RULE 2: 複合インデックスを避けるため、全メッセージをシンプルにログから購読し、メモリ上でソートとフィルタを行う
       onSnapshot(messagesColRef, (snap) => {
         const allMsgs = [];
         snap.forEach(docSnap => {
@@ -1168,7 +1218,7 @@
         timerMode.className = 'text-[10px] tracking-[0.2em] uppercase text-cyan-400 font-black';
         timerProgress.setAttribute('stroke', 'url(#neon-grad)');
         if (timerContainer) {
-          timerContainer.style.filter = 'drop-shadow(0 0 15px rgba(56, 189, 247, 0.4))';
+          timerContainer.style.filter = 'drop-shadow(0 0 15px rgba(56, 189, 248, 0.4))';
         }
       } else {
         timerMode.textContent = 'REST TIME';
