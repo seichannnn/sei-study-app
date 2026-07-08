@@ -1512,10 +1512,16 @@
       }
     });
 
+    let isSendingMessage = false;
+
     window.sendChatMessage = async function() {
+      if (isSendingMessage) return;
+
       const inputEl = document.getElementById('chat-input-text');
       const text = inputEl.value.trim();
       if (!text || !activeChatFriendId || !currentUser) return;
+
+      isSendingMessage = true;
 
       const channelId = [currentUser.uid, activeChatFriendId].sort().join('_');
       const messagesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'messages');
@@ -1537,6 +1543,8 @@
       } catch (err) {
         console.error("Failed to send message: ", err);
         showToast("メッセージ送信に失敗しました");
+      } finally {
+        isSendingMessage = false;
       }
     };
 
