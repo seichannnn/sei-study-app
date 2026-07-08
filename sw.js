@@ -1,5 +1,5 @@
 // StudyFlow Service Worker - 通知クリックハンドラ & オフライン対応
-const CACHE_NAME = 'studyflow-v11';
+const CACHE_NAME = 'studyflow-v12';
 
 // Install: キャッシュは最小限に
 self.addEventListener('install', (event) => {
@@ -63,10 +63,15 @@ self.addEventListener('push', (event) => {
 
 // Fetch: ネットワーク優先（オフラインフォールバック）
 self.addEventListener('fetch', (event) => {
-  // Firebase系、外部CDN、analytics は通さない
-  if (event.request.url.includes('firebaseio.com') ||
-      event.request.url.includes('googleapis.com') ||
-      event.request.url.includes('gstatic.com')) {
+  // Firebase系、外部CDN、Vercel APIなどはキャッシュ対象外として直接フェッチする
+  const bypassCache = 
+    event.request.url.includes('firebaseio.com') ||
+    event.request.url.includes('googleapis.com') ||
+    event.request.url.includes('gstatic.com') ||
+    event.request.url.includes('vercel.app');
+
+  if (bypassCache) {
+    event.respondWith(fetch(event.request));
     return;
   }
   
