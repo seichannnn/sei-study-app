@@ -515,6 +515,29 @@
           <span class="text-[9px] bg-red-950 text-red-400 font-extrabold px-2 py-1 rounded-full border border-red-800/40">SECURE</span>
         </div>
 
+        <!-- 管理者承認リクエスト -->
+        <div id="admin-requests-panel" class="glass-panel rounded-2xl p-5 shadow-glass space-y-4 hidden">
+          <h3 class="text-xs font-black tracking-wider text-slate-400 uppercase flex items-center space-x-2">
+            <i data-lucide="shield-alert" class="w-4 h-4 text-rose-400"></i>
+            <span>ADMIN APPROVAL REQUESTS / 管理者承認リクエスト</span>
+          </h3>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="border-b border-white/10 text-slate-400 font-bold uppercase tracking-wider">
+                  <th class="py-2.5">申請ユーザー</th>
+                  <th class="py-2.5">メールアドレス</th>
+                  <th class="py-2.5">申請日時</th>
+                  <th class="py-2.5 text-right">操作</th>
+                </tr>
+              </thead>
+              <tbody id="admin-requests-table-body" class="divide-y divide-white/5 font-medium text-slate-300">
+                <!-- JSでロード -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- 登録ユーザー一覧 -->
         <div class="glass-panel rounded-2xl p-5 shadow-glass space-y-4">
           <h3 class="text-xs font-black tracking-wider text-slate-400 uppercase flex items-center space-x-2">
@@ -535,6 +558,30 @@
                 <!-- JSでロード -->
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <!-- 全員へのお知らせプッシュ送信 -->
+        <div class="glass-panel rounded-2xl p-5 shadow-glass space-y-4">
+          <h3 class="text-xs font-black tracking-wider text-slate-400 uppercase flex items-center space-x-2">
+            <i data-lucide="megaphone" class="w-4 h-4 text-amber-400"></i>
+            <span>BROADCAST PUSH NOTIFICATION / 全員へのお知らせ送信</span>
+          </h3>
+          <div class="space-y-3">
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 mb-1">通知タイトル</label>
+              <input type="text" id="admin-broadcast-title" placeholder="例: 📢 メンテナンスのお知らせ" class="w-full glass-input rounded-xl px-4 py-2 text-xs text-slate-200 outline-none transition">
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-slate-400 mb-1">通知本文 (任意のテキスト)</label>
+              <textarea id="admin-broadcast-body" rows="3" placeholder="全員に送信するメッセージ内容を入力してください..." class="w-full glass-input rounded-xl px-4 py-2 text-xs text-slate-200 outline-none transition resize-none"></textarea>
+            </div>
+            <div class="flex justify-end">
+              <button onclick="sendBroadcastPushNotification()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center space-x-1.5 shadow-neon-blue">
+                <i data-lucide="send" class="w-3.5 h-3.5"></i>
+                <span>全員にプッシュ通知を送信</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1538,6 +1585,7 @@
         renderFriendRequests();
       }
       if (tabId === 'admin') {
+        loadAdminRequests();
         loadAdminUsers();
         loadAdminLogs();
       }
@@ -2028,6 +2076,160 @@
     // ============================================================
     // 10. 管理者ダッシュボード機能
     // ============================================================
+    async function loadAdminRequests() {
+      const panel = document.getElementById('admin-requests-panel');
+      const tbody = document.getElementById('admin-requests-table-body');
+      if (!panel || !tbody) return;
+
+      tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-500">読込中...</td></tr>';
+
+      const reqColRef = collection(db, 'artifacts', appId, 'public', 'data', 'admin_requests');
+      const q = query(reqColRef, where('status', '==', 'pending'));
+
+      try {
+        const snap = await getDocs(q);
+        tbody.innerHTML = '';
+        if (snap.empty) {
+          panel.classList.add('hidden');
+          return;
+        }
+
+        panel.classList.remove('hidden');
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const reqId = docSnap.id;
+          const tr = document.createElement('tr');
+          const ts = d.timestamp ? new Date(d.timestamp).toLocaleString('ja-JP') : '';
+          
+          tr.innerHTML = `
+            <td class="py-2.5">
+              <span class="text-slate-200 font-bold">${escapeHTML(d.displayName || 'GUEST')}</span>
+              <span class="block text-[9px] text-slate-500">${escapeHTML(d.easyId || d.uid || '')}</span>
+            </td>
+            <td class="py-2.5 text-slate-400">${escapeHTML(d.email || 'N/A')}</td>
+            <td class="py-2.5 text-slate-400">${ts}</td>
+            <td class="py-2.5 text-right space-x-2">
+              <button onclick="approveAdminRequest('${reqId}', '${d.uid}')" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95">承認</button>
+              <button onclick="rejectAdminRequest('${reqId}', '${d.uid}')" class="bg-rose-950 border border-rose-800 text-rose-400 hover:bg-rose-900 font-black px-2.5 py-1 rounded-lg text-[10px] transition active:scale-95">却下</button>
+            </td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (err) {
+        console.error("Failed to load admin requests: ", err);
+        tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-rose-400">読込エラー</td></tr>';
+      }
+    }
+
+    window.approveAdminRequest = async function(reqId, targetUid) {
+      showToast("承認処理中...");
+      try {
+        // 1. ユーザーの isAdmin を true に更新
+        const userRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetUid);
+        await updateDoc(userRef, { isAdmin: true });
+
+        // 2. リクエストの status を accepted に更新
+        const reqRef = doc(db, 'artifacts', appId, 'public', 'data', 'admin_requests', reqId);
+        await updateDoc(reqRef, { status: 'accepted' });
+
+        // 3. プッシュ通知を送信
+        sendPushToUser(targetUid, "🛡️ 管理者権限 承認", "管理者権限が承認されました！アプリを再起動するかタブを確認してください。");
+
+        await logAdminAction("ADMIN_APPROVE", `ユーザー(${targetUid})の管理者権限を承認しました`);
+        showToast("🎉 管理者権限を承認しました。");
+        
+        // 再ロード
+        loadAdminRequests();
+        loadAdminUsers();
+      } catch (err) {
+        console.error("Failed to approve admin request:", err);
+        showToast("承認に失敗しました。");
+      }
+    };
+
+    window.rejectAdminRequest = async function(reqId, targetUid) {
+      showToast("却下処理中...");
+      try {
+        // 1. リクエストの status を rejected に更新
+        const reqRef = doc(db, 'artifacts', appId, 'public', 'data', 'admin_requests', reqId);
+        await updateDoc(reqRef, { status: 'rejected' });
+
+        // 2. プッシュ通知を送信
+        sendPushToUser(targetUid, "🛡️ 管理者権限 却下", "管理者権限の申請が却下されました。");
+
+        await logAdminAction("ADMIN_REJECT", `ユーザー(${targetUid})の管理者権限の申請を却下しました`);
+        showToast("申請を却下しました。");
+
+        // 再ロード
+        loadAdminRequests();
+      } catch (err) {
+        console.error("Failed to reject admin request:", err);
+        showToast("却下処理に失敗しました。");
+      }
+    };
+
+    window.sendBroadcastPushNotification = async function() {
+      const titleInput = document.getElementById('admin-broadcast-title');
+      const bodyInput = document.getElementById('admin-broadcast-body');
+      
+      const title = titleInput.value.trim();
+      const body = bodyInput.value.trim();
+
+      if (!title || !body) {
+        showToast("タイトルと本文を入力してください。");
+        return;
+      }
+
+      if (PUSH_API_URL === 'https://notifications-api-wheat.vercel.app/api/push' && '__VERCEL_PUSH_API_URL__' === PUSH_API_URL) {
+        showToast("プッシュAPI設定がされていません");
+        return;
+      }
+
+      showToast("プッシュ通知を全ユーザーに送信中...");
+
+      try {
+        // 全ユーザーを取得
+        const usersColRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
+        const snap = await getDocs(usersColRef);
+        
+        let allSubscriptions = [];
+        snap.forEach(userDoc => {
+          const data = userDoc.data();
+          const subs = data.pushSubscriptions || [];
+          allSubscriptions = allSubscriptions.concat(subs);
+        });
+
+        if (allSubscriptions.length === 0) {
+          showToast("送信対象のプッシュ通知トークン（許可ユーザー）がありません。");
+          return;
+        }
+
+        // Vercel APIに送信
+        const response = await fetch(PUSH_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subscriptions: allSubscriptions,
+            title,
+            body,
+            link: '/'
+          })
+        });
+
+        const result = await response.json();
+        console.log("一斉送信結果:", result);
+        
+        await logAdminAction("ADMIN_BROADCAST", `お知らせ一斉送信: 「${title}」を送信しました`);
+        showToast(`🔔 全員にお知らせを送信しました！(成功: ${result.succeeded || 0}, 失敗: ${result.failed || 0})`);
+        
+        titleInput.value = '';
+        bodyInput.value = '';
+      } catch (err) {
+        console.error("Failed to send broadcast push:", err);
+        showToast("一斉送信に失敗しました。");
+      }
+    };
+
     async function loadAdminUsers() {
       const tbody = document.getElementById('admin-users-table-body');
       tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-500">読込中...</td></tr>';
@@ -2346,7 +2548,9 @@
         `;
         container.appendChild(card);
       });
-      lucide.createIcons();
+      if (typeof lucide !== 'undefined' && lucide.createIcons) {
+        lucide.createIcons();
+      }
     }
 
     // ============================================================
