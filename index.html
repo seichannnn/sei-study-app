@@ -341,9 +341,9 @@
       </div>
 
       <!-- フルスクリーンチャットルーム (fixedオーバーレイ) -->
-      <div id="chat-box-area" class="fixed inset-x-0 bottom-0 top-0 z-50 bg-cyberdark hidden flex flex-col h-[100dvh] max-h-[100dvh] overscroll-behavior-y-none">
+      <div id="chat-box-area" class="fixed inset-0 z-50 bg-cyberdark hidden flex flex-col" style="padding-top: env(safe-area-inset-top, 0px);">
         <!-- チャットヘッダー -->
-        <div class="flex items-center space-x-3 px-4 pt-[calc(env(safe-area-inset-top,1.25rem)+0.5rem)] pb-3 border-b border-white/5 bg-cyberdark/95 backdrop-blur-xl">
+        <div class="flex items-center space-x-3 px-4 py-3 border-b border-white/5 bg-cyberdark/95 backdrop-blur-xl">
           <button onclick="closeChatArea()" class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 hover:text-white transition active:scale-90">
             <i data-lucide="arrow-left" class="w-5 h-5"></i>
           </button>
@@ -354,13 +354,13 @@
         </div>
 
         <!-- メッセージ表示部 -->
-        <div id="chat-messages-scroll" class="flex-1 overflow-y-auto py-3 px-4 space-y-3 text-xs" style="-webkit-overflow-scrolling: touch;">
+        <div id="chat-messages-scroll" class="flex-1 overflow-y-auto py-3 px-4 space-y-3 text-xs" style="-webkit-overflow-scrolling: touch; overscroll-behavior: contain;">
           <!-- メッセージロード -->
         </div>
 
         <!-- メッセージ入力 -->
-        <div class="flex space-x-2 border-t border-white/5 p-4 pb-[calc(env(safe-area-inset-bottom,0.5rem)+0.5rem)] bg-cyberdark/95 backdrop-blur-xl">
-          <input type="text" id="chat-input-text" placeholder="メッセージを入力（クリーンに話そう）" class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none" inputmode="text">
+        <div id="chat-input-bar" class="flex space-x-2 border-t border-white/5 bg-cyberdark/95 backdrop-blur-xl" style="padding: 12px 16px; padding-bottom: max(12px, env(safe-area-inset-bottom));">
+          <input type="text" id="chat-input-text" placeholder="メッセージを入力" autocomplete="off" class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none">
           <button onclick="sendChatMessage()" class="w-11 h-11 bg-cyan-500 text-slate-950 rounded-xl flex items-center justify-center hover:bg-cyan-400 transition active:scale-95">
             <i data-lucide="send" class="w-4 h-4"></i>
           </button>
@@ -1411,10 +1411,8 @@
       
       const chatBox = document.getElementById('chat-box-area');
       chatBox.classList.remove('hidden');
-      
-      if (window.visualViewport) {
-        chatBox.style.height = `${window.visualViewport.height}px`;
-      }
+      // body のスクロールをロックしてチャット内だけスクロールできるようにする
+      document.body.style.overflow = 'hidden';
       
       // スクロールを下に
       renderChatMessages();
@@ -1424,7 +1422,8 @@
       activeChatFriendId = null;
       const chatBox = document.getElementById('chat-box-area');
       chatBox.classList.add('hidden');
-      chatBox.style.height = '';
+      chatBox.style.bottom = ''; // キーボードオフセットをリセット
+      document.body.style.overflow = ''; // ロック解除
     };
 
     function renderChatMessages() {
@@ -1473,34 +1472,37 @@
       }, 50);
     }
 
-    // iOS/Android キーボード表示時のズレ対策 (visualViewport 監視)
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', () => {
+    // ============================================================
+    // iOS / Android キーボード対応: visualViewport で bottom オフセット制御
+    // ============================================================
+    // iOS Safariではキーボードが出ても fixed 要素の bottom が変わらないため、
+    // visualViewport の resize を監視して chatBox の bottom を動的に調整する
+    (function setupChatKeyboardHandler() {
+      if (!window.visualViewport) return;
+
+      function adjustChatForKeyboard() {
         const chatBox = document.getElementById('chat-box-area');
-        if (chatBox && !chatBox.classList.contains('hidden')) {
-          chatBox.style.height = `${window.visualViewport.height}px`;
-          const container = document.getElementById('chat-messages-scroll');
-          if (container) {
-            setTimeout(() => {
-              container.scrollTop = container.scrollHeight;
-            }, 80);
-          }
+        if (!chatBox || chatBox.classList.contains('hidden')) return;
+
+        const keyboardHeight = window.innerHeight - window.visualViewport.height - window.visualViewport.offsetTop;
+        chatBox.style.bottom = Math.max(0, keyboardHeight) + 'px';
+
+        // メッセージを最下部へ
+        const container = document.getElementById('chat-messages-scroll');
+        if (container) {
+          setTimeout(() => { container.scrollTop = container.scrollHeight; }, 100);
         }
-      });
-      window.visualViewport.addEventListener('scroll', () => {
-        if (window.visualViewport.offsetTop > 0) {
-          window.scrollTo(0, 0);
-        }
-      });
-    }
+      }
+
+      window.visualViewport.addEventListener('resize', adjustChatForKeyboard);
+      window.visualViewport.addEventListener('scroll', adjustChatForKeyboard);
+    })();
 
     // チャット入力欄フォーカス時に自動で最下部スクロール
     document.getElementById('chat-input-text').addEventListener('focus', () => {
       const container = document.getElementById('chat-messages-scroll');
       if (container) {
-        setTimeout(() => {
-          container.scrollTop = container.scrollHeight;
-        }, 150);
+        setTimeout(() => { container.scrollTop = container.scrollHeight; }, 400);
       }
     });
 
