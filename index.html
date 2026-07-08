@@ -2,7 +2,7 @@
 <html lang="ja" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content">
   <title>StudyFlow Pro - Connect</title>
   
   <!-- PWA & Mobile Web Apps -->
@@ -97,7 +97,7 @@
     }
   </style>
 </head>
-<body class="text-gray-100 font-sans h-screen h-[100dvh] w-screen flex flex-col overflow-hidden bg-cyberdark bg-grid">
+<body class="text-gray-100 font-sans h-screen w-screen flex flex-col overflow-hidden bg-cyberdark bg-grid">
 
   <!-- ================= SPLASH/INITIAL LOADING SCREEN ================= -->
   <div id="splash-screen" class="fixed inset-0 z-[100] flex flex-col justify-center items-center px-6 bg-cyberdark">
@@ -210,7 +210,7 @@
     </div>
 
     <!-- ヘッダー -->
-    <header class="px-6 pt-5 pb-4 border-b border-white/5 bg-cyberdark/40 backdrop-blur-xl sticky top-0 z-40 flex justify-between items-center">
+    <header class="px-6 pt-5 pb-4 border-b border-white/5 bg-cyberdark/40 backdrop-blur-xl flex justify-between items-center">
       <div>
         <h1 class="text-2xl font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-300 to-purple-500 bg-clip-text text-transparent">STUDYFLOW</h1>
         <p class="text-[10px] tracking-widest text-slate-400 mt-0.5">TODAY: <span id="header-today-time" class="font-bold text-cyan-400">0 MIN</span></p>
@@ -1406,15 +1406,11 @@
     window.openChatRoom = function(friendId) {
       activeChatFriendId = friendId;
       const profile = globalProfiles[friendId] || { displayName: 'GUEST' };
-      
       document.getElementById('chat-target-name').textContent = `CHAT WITH: ${profile.displayName.toUpperCase()}`;
-      
-      const chatBox = document.getElementById('chat-box-area');
-      chatBox.classList.remove('hidden');
-      // body のスクロールをロックしてチャット内だけスクロールできるようにする
-      document.body.style.overflow = 'hidden';
-      
-      // スクロールを下に
+      document.getElementById('chat-box-area').classList.remove('hidden');
+      // 背景のメインスクロールを停止
+      const mainEl = document.querySelector('main');
+      if (mainEl) mainEl.style.overflow = 'hidden';
       renderChatMessages();
     };
 
@@ -1422,8 +1418,10 @@
       activeChatFriendId = null;
       const chatBox = document.getElementById('chat-box-area');
       chatBox.classList.add('hidden');
-      chatBox.style.bottom = ''; // キーボードオフセットをリセット
-      document.body.style.overflow = ''; // ロック解除
+      chatBox.style.bottom = '';
+      // スクロールを復元
+      const mainEl = document.querySelector('main');
+      if (mainEl) mainEl.style.overflow = '';
     };
 
     function renderChatMessages() {
