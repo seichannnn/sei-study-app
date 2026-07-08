@@ -91,9 +91,13 @@
     ::-webkit-scrollbar {
       display: none;
     }
+    /* モバイル慣性スクロールとスクロールエリア調整 */
+    main {
+      -webkit-overflow-scrolling: touch;
+    }
   </style>
 </head>
-<body class="text-gray-100 font-sans min-h-screen flex flex-col justify-between overflow-hidden bg-cyberdark bg-grid">
+<body class="text-gray-100 font-sans h-screen h-[100dvh] w-screen flex flex-col overflow-hidden bg-cyberdark bg-grid">
 
   <!-- ================= SPLASH/INITIAL LOADING SCREEN ================= -->
   <div id="splash-screen" class="fixed inset-0 z-[100] flex flex-col justify-center items-center px-6 bg-cyberdark">
@@ -189,7 +193,7 @@
 
 
   <!-- ================= APP SCREEN ================= -->
-  <div id="app-screen" class="hidden flex-1 flex flex-col justify-between overflow-hidden">
+  <div id="app-screen" class="hidden h-full w-full flex flex-col overflow-hidden">
     
     <!-- リアルタイム勉強通知バナー（友達が勉強を開始した時にフワッと出る） -->
     <div id="realtime-toast" class="fixed top-4 left-4 right-4 z-50 glass-panel border border-neongreen/40 rounded-2xl p-4 shadow-neon-green flex items-center space-x-3 transform -translate-y-32 opacity-0 transition-all duration-500">
@@ -652,6 +656,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
     import { getAuth, signInWithCustomToken, signInAnonymously, signInWithPopup, onAuthStateChanged, signOut, GoogleAuthProvider } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
     import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot, addDoc, updateDoc, query, where, orderBy, limit, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    // Web Push API を使用（Firebase Messaging は不要）
 
     // 1. 環境変数のセットアップ (ユーザーから提供された最新の firebaseConfig)
     const appId = (typeof __app_id !== 'undefined' && __app_id) ? __app_id : 'studyflow-nextgen-pwa';
@@ -1428,6 +1433,11 @@
           timestamp: Date.now()
         });
         inputEl.value = '';
+
+        // バックグラウンドプッシュ通知を送信（Vercel経由）
+        const myName = document.getElementById('user-display-name')?.textContent || '友達';
+        const bodyText = text.length > 60 ? text.substring(0, 60) + '...' : text;
+        sendPushToUser(activeChatFriendId, `💬 ${myName}`, bodyText);
       } catch (err) {
         console.error("Failed to send message: ", err);
         showToast("メッセージ送信に失敗しました");
@@ -2206,6 +2216,9 @@
         timestamp: Date.now()
       });
 
+      // バックグラウンドプッシュ通知を送信（Vercel経由）
+      sendPushToUser(targetUid, '🤝 友達申請が届きました', `${myName}さんから友達申請が届いています！`);
+
       logAdminAction("FRIEND_REQUEST", `${targetData.displayName || 'GUEST'} に友達申請を送りました`);
       showToast(`📩 「${targetData.displayName || 'GUEST'}」に友達申請を送りました！`);
       document.getElementById('friend-search-input').value = '';
@@ -2257,7 +2270,8 @@
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const d = change.doc.data();
-            if (d.timestamp > appLaunchTimestamp) {
+            // スリープ復帰時の通知爆撃を防ぐため、10分以内の新着のみ通知
+            if (d.timestamp > appLaunchTimestamp && d.timestamp > Date.now() - 10 * 60 * 1000) {
               sendSystemNotification(
                 '🤝 友達申請が届きました',
                 `${d.fromName || '誰か'}さんから友達申請が届きました！`,
@@ -2346,8 +2360,8 @@
         snapshot.docChanges().forEach(change => {
           if (change.type === 'added') {
             const msg = change.doc.data();
-            // 自分宛て、かつアプリ起動後のメッセージのみ通知
-            if (msg.receiverId === user.uid && msg.timestamp > appLaunchTimestamp) {
+            // 自分宛て、かつアプリ起動後の10分以内の新着メッセージのみ通知（スリープ復帰時の爆撃防止）
+            if (msg.receiverId === user.uid && msg.timestamp > appLaunchTimestamp && msg.timestamp > Date.now() - 10 * 60 * 1000) {
               // 現在開いているチャット相手からのメッセージは通知しない
               if (activeChatFriendId !== msg.senderId) {
                 const senderProfile = globalProfiles[msg.senderId] || {};
@@ -2368,12 +2382,106 @@
     // ============================================================
     // 14. 通知許可のリクエストとService Worker登録
     // ============================================================
+    // Vercel通知サーバーのURL（デプロイ後に自動設定されます）
+    const PUSH_API_URL = 'https://notifications-api-wheat.vercel.app/api/push';
+    const VAPID_PUBLIC_KEY = 'BI2rWMOEvjZIrNXGUaAhbLQQ26f3U0BzICkLNs6u3hJq-4NKzsvy_aYXSJb1uRGtY_YHfPG_4D0Mr977VZX8fEo';
+
+    // VAPID公開鍵をUint8Arrayに変換するヘルパー
+    function urlBase64ToUint8Array(base64String) {
+      const padding = '='.repeat((4 - base64String.length % 4) % 4);
+      const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+      const rawData = window.atob(base64);
+      const outputArray = new Uint8Array(rawData.length);
+      for (let i = 0; i < rawData.length; ++i) {
+        outputArray[i] = rawData.charCodeAt(i);
+      }
+      return outputArray;
+    }
+
+    // PushSubscriptionの取得とFirestore登録
+    async function setupPushSubscription(user) {
+      if (!user) return;
+      if (!('Notification' in window) || Notification.permission !== 'granted') {
+        console.log("プッシュ登録スキップ: 通知が不許可または未サポート");
+        return;
+      }
+      if (!('PushManager' in window)) {
+        console.log("プッシュ登録スキップ: PushManager未サポート");
+        return;
+      }
+
+      try {
+        const registration = await navigator.serviceWorker.ready;
+        let subscription = await registration.pushManager.getSubscription();
+
+        // 既存のサブスクリプションがなければ新規作成
+        if (!subscription) {
+          subscription = await registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+          });
+          console.log("新しいPushSubscriptionを作成しました");
+        }
+
+        // サブスクリプションをJSON化してFirestoreに保存
+        const subJSON = subscription.toJSON();
+        const subKey = btoa(subJSON.endpoint).substring(0, 60); // ユニークキー
+
+        const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', user.uid);
+        const userSnap = await getDoc(userDocRef);
+
+        if (userSnap.exists()) {
+          const data = userSnap.data();
+          const existingSubs = data.pushSubscriptions || [];
+
+          // 同じエンドポイントが既に登録されていなければ追加
+          const alreadyExists = existingSubs.some(s => s.endpoint === subJSON.endpoint);
+          if (!alreadyExists) {
+            existingSubs.push(subJSON);
+            await setDoc(userDocRef, { pushSubscriptions: existingSubs }, { merge: true });
+            console.log("PushSubscriptionをFirestoreに登録しました");
+          }
+        }
+      } catch (err) {
+        console.warn("PushSubscriptionの登録エラー:", err);
+      }
+    }
+
+    // Vercel経由でプッシュ通知を送信するヘルパー
+    async function sendPushToUser(targetUserId, title, body, link = '/') {
+      if (PUSH_API_URL === '__VERCEL_PUSH_API_URL__') {
+        console.log('プッシュAPI未設定（Vercelデプロイ待ち）');
+        return;
+      }
+      try {
+        // 対象ユーザーのPushSubscriptionをFirestoreから取得
+        const targetUserRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetUserId);
+        const targetSnap = await getDoc(targetUserRef);
+        if (!targetSnap.exists()) return;
+
+        const targetData = targetSnap.data();
+        const subscriptions = targetData.pushSubscriptions || [];
+        if (subscriptions.length === 0) return;
+
+        // Vercel APIにリクエスト
+        const response = await fetch(PUSH_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ subscriptions, title, body, link })
+        });
+        const result = await response.json();
+        console.log('プッシュ通知送信結果:', result);
+      } catch (err) {
+        console.warn('プッシュ通知の送信に失敗:', err);
+      }
+    }
+
     (async function initNotifications() {
       // Service Workerの登録
       if ('serviceWorker' in navigator) {
         try {
           await navigator.serviceWorker.register('./sw.js');
-          console.log("Service Worker registered with relative path.");
+          console.log("Service Worker registered.");
         } catch (e) {
           console.warn("Service Worker registration failed:", e);
         }
@@ -2396,6 +2504,8 @@
         if (permission === 'granted') {
           showToast("🎉 通知が許可されました！");
           sendSystemNotification("通知が有効になりました！", "StudyFlowからの通知が正常に受信できるようになりました。");
+          // 許可されたので即座にPushSubscriptionを登録する
+          setupPushSubscription(currentUser);
         } else if (permission === 'denied') {
           showToast("通知が拒否されました。ブラウザの設定から変更してください。");
         } else {
@@ -2476,12 +2586,13 @@
       }
     });
 
-    // startRealtimeSync にフック: 友達申請リスナーとチャット通知リスナーを追加
+    // startRealtimeSync にフック: 友達申請リスナー、チャット通知リスナー、およびPushSubscription登録を追加
     const _originalStartRealtimeSync = startRealtimeSync;
     startRealtimeSync = function(user) {
       _originalStartRealtimeSync(user);
       startFriendRequestListeners(user);
       setupChatNotificationListener(user);
+      setupPushSubscription(user); // ログイン・起動時に自動的にPushSubscriptionを登録・更新
     };
 
   </script>
