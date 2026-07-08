@@ -341,9 +341,9 @@
       </div>
 
       <!-- フルスクリーンチャットルーム (fixedオーバーレイ) -->
-      <div id="chat-box-area" class="fixed inset-0 z-50 bg-cyberdark hidden flex flex-col">
+      <div id="chat-box-area" class="fixed inset-x-0 bottom-0 top-0 z-50 bg-cyberdark hidden flex flex-col h-[100dvh] max-h-[100dvh] overscroll-behavior-y-none">
         <!-- チャットヘッダー -->
-        <div class="flex items-center space-x-3 px-4 pt-14 pb-3 border-b border-white/5 bg-cyberdark/95 backdrop-blur-xl">
+        <div class="flex items-center space-x-3 px-4 pt-[calc(env(safe-area-inset-top,1.25rem)+0.5rem)] pb-3 border-b border-white/5 bg-cyberdark/95 backdrop-blur-xl">
           <button onclick="closeChatArea()" class="w-9 h-9 rounded-xl bg-white/5 flex items-center justify-center text-slate-400 hover:text-white transition active:scale-90">
             <i data-lucide="arrow-left" class="w-5 h-5"></i>
           </button>
@@ -354,13 +354,13 @@
         </div>
 
         <!-- メッセージ表示部 -->
-        <div id="chat-messages-scroll" class="flex-1 overflow-y-auto py-3 px-4 space-y-3 text-xs">
+        <div id="chat-messages-scroll" class="flex-1 overflow-y-auto py-3 px-4 space-y-3 text-xs" style="-webkit-overflow-scrolling: touch;">
           <!-- メッセージロード -->
         </div>
 
         <!-- メッセージ入力 -->
-        <div class="flex space-x-2 border-t border-white/5 p-4 pb-8 bg-cyberdark/95 backdrop-blur-xl">
-          <input type="text" id="chat-input-text" placeholder="メッセージを入力（クリーンに話そう）" class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none">
+        <div class="flex space-x-2 border-t border-white/5 p-4 pb-[calc(env(safe-area-inset-bottom,0.5rem)+0.5rem)] bg-cyberdark/95 backdrop-blur-xl">
+          <input type="text" id="chat-input-text" placeholder="メッセージを入力（クリーンに話そう）" class="flex-1 glass-input rounded-xl px-4 py-3 text-xs text-white focus:outline-none" inputmode="text">
           <button onclick="sendChatMessage()" class="w-11 h-11 bg-cyan-500 text-slate-950 rounded-xl flex items-center justify-center hover:bg-cyan-400 transition active:scale-95">
             <i data-lucide="send" class="w-4 h-4"></i>
           </button>
@@ -1408,7 +1408,13 @@
       const profile = globalProfiles[friendId] || { displayName: 'GUEST' };
       
       document.getElementById('chat-target-name').textContent = `CHAT WITH: ${profile.displayName.toUpperCase()}`;
-      document.getElementById('chat-box-area').classList.remove('hidden');
+      
+      const chatBox = document.getElementById('chat-box-area');
+      chatBox.classList.remove('hidden');
+      
+      if (window.visualViewport) {
+        chatBox.style.height = `${window.visualViewport.height}px`;
+      }
       
       // スクロールを下に
       renderChatMessages();
@@ -1416,7 +1422,9 @@
 
     window.closeChatArea = function() {
       activeChatFriendId = null;
-      document.getElementById('chat-box-area').classList.add('hidden');
+      const chatBox = document.getElementById('chat-box-area');
+      chatBox.classList.add('hidden');
+      chatBox.style.height = '';
     };
 
     function renderChatMessages() {
@@ -1459,9 +1467,42 @@
         container.appendChild(msgDiv);
       });
 
-      // スクロールを自動最下部へ
-      container.scrollTop = container.scrollHeight;
+      // スクロールを自動最下部へ (レンダリング遅延対策としてsetTimeoutを適用)
+      setTimeout(() => {
+        container.scrollTop = container.scrollHeight;
+      }, 50);
     }
+
+    // iOS/Android キーボード表示時のズレ対策 (visualViewport 監視)
+    if (window.visualViewport) {
+      window.visualViewport.addEventListener('resize', () => {
+        const chatBox = document.getElementById('chat-box-area');
+        if (chatBox && !chatBox.classList.contains('hidden')) {
+          chatBox.style.height = `${window.visualViewport.height}px`;
+          const container = document.getElementById('chat-messages-scroll');
+          if (container) {
+            setTimeout(() => {
+              container.scrollTop = container.scrollHeight;
+            }, 80);
+          }
+        }
+      });
+      window.visualViewport.addEventListener('scroll', () => {
+        if (window.visualViewport.offsetTop > 0) {
+          window.scrollTo(0, 0);
+        }
+      });
+    }
+
+    // チャット入力欄フォーカス時に自動で最下部スクロール
+    document.getElementById('chat-input-text').addEventListener('focus', () => {
+      const container = document.getElementById('chat-messages-scroll');
+      if (container) {
+        setTimeout(() => {
+          container.scrollTop = container.scrollHeight;
+        }, 150);
+      }
+    });
 
     window.sendChatMessage = async function() {
       const inputEl = document.getElementById('chat-input-text');
