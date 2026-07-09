@@ -218,7 +218,14 @@
       <!-- ヘッダー（スクロールで流れる） -->
       <header class="-mx-5 px-6 pt-5 pb-4 border-b border-white/5 bg-cyberdark/40 backdrop-blur-xl flex justify-between items-center">
         <div>
-          <h1 class="text-2xl font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-300 to-purple-500 bg-clip-text text-transparent">STUDYFLOW</h1>
+          <div class="flex items-center space-x-3">
+            <h1 class="text-2xl font-black tracking-widest bg-gradient-to-r from-cyan-400 via-sky-300 to-purple-500 bg-clip-text text-transparent">STUDYFLOW</h1>
+            <!-- アプリ内通知ベルボタン -->
+            <button onclick="toggleNotificationTray()" class="relative p-1 text-slate-400 hover:text-cyan-400 transition active:scale-95">
+              <i data-lucide="bell" class="w-5 h-5"></i>
+              <span id="notification-badge" class="absolute -top-1 -right-1 bg-rose-500 text-white font-extrabold text-[8px] w-4.5 h-4.5 rounded-full flex items-center justify-center border border-cyberdark hidden">0</span>
+            </button>
+          </div>
           <p class="text-[10px] tracking-widest text-slate-400 mt-0.5">TODAY: <span id="header-today-time" class="font-bold text-cyan-400">0 MIN</span></p>
         </div>
         <div class="flex items-center space-x-2">
@@ -600,6 +607,30 @@
         <button onclick="sendChatMessage()" class="w-11 h-11 bg-cyan-500 text-slate-950 rounded-xl flex items-center justify-center hover:bg-cyan-400 transition active:scale-95">
           <i data-lucide="send" class="w-4 h-4"></i>
         </button>
+      </div>
+    </div>
+
+    <!-- アプリ内通知トレイ (fixedオーバーレイ) -->
+    <div id="notification-tray" class="fixed inset-0 z-[60] bg-cyberdark/60 backdrop-blur-sm hidden flex justify-center items-center px-4">
+      <div class="glass-panel w-full max-w-md rounded-3xl p-6 space-y-4 border border-white/10 shadow-glass flex flex-col max-h-[80vh]">
+        <div class="flex justify-between items-center pb-2 border-b border-white/5">
+          <h3 class="text-sm font-black tracking-wider text-slate-300 uppercase flex items-center space-x-1.5">
+            <i data-lucide="bell" class="w-4 h-4 text-cyan-400"></i>
+            <span>NOTIFICATIONS / アプリ内通知</span>
+          </h3>
+          <button onclick="toggleNotificationTray()" class="text-slate-400 hover:text-white transition">
+            <i data-lucide="x" class="w-5 h-5"></i>
+          </button>
+        </div>
+        
+        <div class="flex justify-between items-center text-xs">
+          <span id="notification-count-text" class="text-slate-400 font-bold">通知はありません</span>
+          <button id="btn-mark-all-read" onclick="markAllNotificationsRead()" class="text-cyan-400 hover:text-cyan-300 font-bold hidden">すべて既読にする</button>
+        </div>
+
+        <div id="notification-list" class="flex-1 overflow-y-auto space-y-3 pr-1 max-h-[50vh] min-h-[150px] text-xs">
+          <!-- JSでロード -->
+        </div>
       </div>
     </div>
 
@@ -1164,17 +1195,53 @@
           if (data.createdAt) createdAt = data.createdAt;
         }
 
-        // Googleログインで、まだプロフィール設定（名前決定）をしていない場合、モーダルを表示して処理を止める
+        // Googleログインで、名前設定がまだな場合はモーダル表示
         if (!user.isAnonymous && !isProfileSetup) {
           openNameSetupModal(user);
           return false;
         }
 
-        // アノニマス（ゲスト）でまだIDがない場合、仮のeasyIdを設定する（重複チェック付き）
+        // アノニマスのeasyId自動生成
         if (user.isAnonymous && !easyId) {
           easyId = `GUEST-${Math.floor(1000 + Math.random() * 9000)}`;
           const easyIdDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'easyIds', easyId);
           await setDoc(easyIdDocRef, { uid: user.uid, displayName: currentName });
+        }
+
+        // 連勝記録（Streak）および最終学習日（lastStudyDate）の計算
+        let streak = 0;
+        let lastStudyDate = '';
+        
+        // 重複を除いて日付リストを抽出して昇順ソート
+        const studyDates = Array.from(new Set(localState.logs.map(log => log.date))).sort();
+        if (studyDates.length > 0) {
+          const latestDateStr = studyDates[studyDates.length - 1];
+          lastStudyDate = latestDateStr;
+
+          // 日本時間の今日と昨日を算出
+          const jstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
+          const todayJST = jstNow.toISOString().split('T')[0];
+          
+          const jstYesterday = new Date(Date.now() + 9 * 60 * 60 * 1000 - 24 * 60 * 60 * 1000);
+          const yesterdayJST = jstYesterday.toISOString().split('T')[0];
+
+          // 最終学習日が今日または昨日であれば継続
+          if (latestDateStr === todayJST || latestDateStr === yesterdayJST) {
+            streak = 1;
+            let currentCheck = new Date(latestDateStr);
+
+            // 過去に遡って連続日数を計算
+            for (let i = studyDates.length - 2; i >= 0; i--) {
+              let prevDate = new Date(studyDates[i]);
+              let dayDiff = (currentCheck - prevDate) / (1000 * 60 * 60 * 24);
+              if (Math.round(dayDiff) === 1) {
+                streak++;
+                currentCheck = prevDate;
+              } else if (Math.round(dayDiff) > 1) {
+                break;
+              }
+            }
+          }
         }
 
         await setDoc(profileDocRef, {
@@ -1187,7 +1254,9 @@
           isStudying: isRunning && isStudyMode,
           currentSubject: isRunning && isStudyMode ? timerSubject.value : '',
           lastActive: Date.now(),
-          isProfileSetup: true
+          isProfileSetup: true,
+          streak: streak,
+          lastStudyDate: lastStudyDate
         }, { merge: true });
 
         // DOMの管理者表示切り替え
@@ -1298,7 +1367,15 @@
       onSnapshot(messagesColRef, (snap) => {
         const allMsgs = [];
         snap.forEach(docSnap => {
-          allMsgs.push(docSnap.data());
+          const d = docSnap.data();
+          const msgId = docSnap.id;
+          allMsgs.push({ id: msgId, ...d });
+
+          // 現在チャットを開いており、その相手から届いた未読メッセージであれば既読にする
+          if (activeChatFriendId && d.senderId === activeChatFriendId && d.receiverId === user.uid && !d.isRead) {
+            const msgDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'messages', msgId);
+            updateDoc(msgDocRef, { isRead: true }).catch(e => console.error("Failed to mark read:", e));
+          }
         });
         
         // タイムスタンプ順にソートしてメモリ保持
@@ -1417,6 +1494,17 @@
       if (mainEl) mainEl.style.overflow = 'hidden';
       document.body.style.overflow = 'hidden';
       document.documentElement.style.overflow = 'hidden';
+
+      // 既存の相手からの未読メッセージをすべて既読に更新する
+      const channelId = [currentUser.uid, activeChatFriendId].sort().join('_');
+      const messages = window.cachedMessages || [];
+      messages.forEach(msg => {
+        if (msg.channelId === channelId && msg.senderId === activeChatFriendId && !msg.isRead) {
+          const msgDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'messages', msg.id);
+          updateDoc(msgDocRef, { isRead: true }).catch(e => console.error("Failed to mark read:", e));
+        }
+      });
+
       renderChatMessages();
     };
 
@@ -1460,13 +1548,14 @@
         msgDiv.className = `flex ${isMyMsg ? 'justify-end' : 'justify-start'} w-full`;
 
         const timeStr = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const readStatusText = isMyMsg && msg.isRead ? '<span class="text-[9px] text-cyan-400 font-extrabold mr-1 animate-pulse">既読</span>' : '';
 
         msgDiv.innerHTML = `
           <div class="max-w-[80%] space-y-1">
             <div class="px-3 py-2.5 rounded-2xl ${isMyMsg ? 'bg-gradient-to-tr from-cyan-500 to-blue-600 text-slate-950 rounded-tr-none font-bold' : 'glass-panel text-slate-200 rounded-tl-none border border-white/5'} break-words">
               ${escapeHTML(msg.text)}
             </div>
-            <p class="text-[8px] text-slate-500 font-bold ${isMyMsg ? 'text-right' : 'text-left'}">${timeStr}</p>
+            <p class="text-[8px] text-slate-500 font-bold ${isMyMsg ? 'text-right' : 'text-left'}">${readStatusText}${timeStr}</p>
           </div>
         `;
         container.appendChild(msgDiv);
@@ -2710,6 +2799,9 @@
 
     // Vercel経由でプッシュ通知を送信するヘルパー
     async function sendPushToUser(targetUserId, title, body, link = '/') {
+      // アプリ内通知も同時に作成してFirestoreに書き込む
+      createInAppNotification(targetUserId, title, body);
+
       if (PUSH_API_URL === '__VERCEL_PUSH_API_URL__') {
         console.log('プッシュAPI未設定（Vercelデプロイ待ち）');
         return;
@@ -2736,6 +2828,156 @@
         console.warn('プッシュ通知の送信に失敗:', err);
       }
     }
+
+    // ============================================================
+    // 15. アプリ内通知システム (追加機能)
+    // ============================================================
+    let myNotifications = [];
+
+    // アプリ内通知の作成
+    async function createInAppNotification(toUid, title, body) {
+      if (!toUid) return;
+      const notifColRef = collection(db, 'artifacts', appId, 'public', 'data', 'notifications');
+      try {
+        await addDoc(notifColRef, {
+          toUid,
+          title,
+          body,
+          isRead: false,
+          timestamp: Date.now()
+        });
+      } catch (err) {
+        console.error("Failed to create in-app notification:", err);
+      }
+    }
+
+    // アプリ内通知リスナーの開始
+    function startNotificationListener(user) {
+      if (!user) return;
+      const notifColRef = collection(db, 'artifacts', appId, 'public', 'data', 'notifications');
+      const q = query(
+        notifColRef,
+        where('toUid', '==', user.uid),
+        orderBy('timestamp', 'desc'),
+        limit(50)
+      );
+
+      onSnapshot(q, (snapshot) => {
+        myNotifications = [];
+        snapshot.forEach(docSnap => {
+          myNotifications.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        
+        // バッジの更新
+        updateNotificationBadge();
+        
+        // トレイが開いていたら再描画
+        const tray = document.getElementById('notification-tray');
+        if (tray && !tray.classList.contains('hidden')) {
+          renderNotificationTray();
+        }
+      }, err => {
+        console.warn("Notification listener error (likely index compiling or auth guard):", err);
+      });
+    }
+
+    // バッジ件数とベルマークの更新
+    function updateNotificationBadge() {
+      const badge = document.getElementById('notification-badge');
+      if (!badge) return;
+      const unreadCount = myNotifications.filter(n => !n.isRead).length;
+      
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    // 通知トレイの開閉
+    window.toggleNotificationTray = function() {
+      const tray = document.getElementById('notification-tray');
+      if (!tray) return;
+      
+      if (tray.classList.contains('hidden')) {
+        tray.classList.remove('hidden');
+        renderNotificationTray();
+      } else {
+        tray.classList.add('hidden');
+      }
+    };
+
+    // 通知トレイの描画
+    function renderNotificationTray() {
+      const listContainer = document.getElementById('notification-list');
+      const countText = document.getElementById('notification-count-text');
+      const markAllBtn = document.getElementById('btn-mark-all-read');
+      if (!listContainer) return;
+
+      listContainer.innerHTML = '';
+      const unreadCount = myNotifications.filter(n => !n.isRead).length;
+
+      if (myNotifications.length === 0) {
+        countText.textContent = '通知はありません';
+        markAllBtn.classList.add('hidden');
+        listContainer.innerHTML = `
+          <div class="text-center py-8 text-slate-500">
+            <i data-lucide="bell-off" class="w-8 h-8 mx-auto mb-2 opacity-30"></i>
+            <p>新しい通知は届いていません</p>
+          </div>
+        `;
+        lucide.createIcons();
+        return;
+      }
+
+      countText.textContent = `未読通知 (${unreadCount}件)`;
+      if (unreadCount > 0) {
+        markAllBtn.classList.remove('hidden');
+      } else {
+        markAllBtn.classList.add('hidden');
+      }
+
+      myNotifications.forEach(n => {
+        const item = document.createElement('div');
+        const isUnread = !n.isRead;
+        const ts = n.timestamp ? new Date(n.timestamp).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+        
+        item.className = `glass-panel rounded-2xl p-4 border transition ${isUnread ? 'border-cyan-500/30 bg-cyan-950/10' : 'border-white/5 bg-white/2'}`;
+        item.innerHTML = `
+          <div class="flex justify-between items-start">
+            <div class="space-y-1 pr-2">
+              <div class="flex items-center space-x-1.5">
+                ${isUnread ? '<span class="w-2 h-2 rounded-full bg-cyan-400 animate-pulse flex-shrink-0"></span>' : ''}
+                <h4 class="font-bold text-slate-200 text-xs">${escapeHTML(n.title)}</h4>
+              </div>
+              <p class="text-slate-400 text-[11px] leading-relaxed">${escapeHTML(n.body)}</p>
+            </div>
+            <span class="text-[9px] text-slate-600 font-mono whitespace-nowrap">${ts}</span>
+          </div>
+        `;
+        listContainer.appendChild(item);
+      });
+      lucide.createIcons();
+    }
+
+    // すべて既読にする
+    window.markAllNotificationsRead = async function() {
+      const unread = myNotifications.filter(n => !n.isRead);
+      if (unread.length === 0) return;
+
+      try {
+        const batchPromises = unread.map(n => {
+          const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'notifications', n.id);
+          return updateDoc(docRef, { isRead: true });
+        });
+        await Promise.all(batchPromises);
+        showToast("すべての通知を既読にしました");
+      } catch (err) {
+        console.error("Failed to mark notifications read:", err);
+        showToast("既読処理に失敗しました");
+      }
+    };
 
     (async function initNotifications() {
       // Service Workerの登録
@@ -2847,13 +3089,14 @@
       }
     });
 
-    // startRealtimeSync にフック: 友達申請リスナー、チャット通知リスナー、およびPushSubscription登録を追加
+    // startRealtimeSync にフック: 友達申請リスナー、チャット通知リスナー、PushSubscription登録、アプリ内通知リスナーを追加
     const _originalStartRealtimeSync = startRealtimeSync;
     startRealtimeSync = function(user) {
       _originalStartRealtimeSync(user);
       startFriendRequestListeners(user);
       setupChatNotificationListener(user);
       setupPushSubscription(user); // ログイン・起動時に自動的にPushSubscriptionを登録・更新
+      startNotificationListener(user); // アプリ内通知リスナー
     };
 
   </script>
