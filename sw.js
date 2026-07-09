@@ -1,5 +1,5 @@
 // StudyFlow Service Worker - 通知クリックハンドラ & オフライン対応
-const CACHE_NAME = 'studyflow-v18';
+const CACHE_NAME = 'studyflow-v19';
 
 // Install: キャッシュは最小限に
 self.addEventListener('install', (event) => {
