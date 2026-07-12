@@ -251,6 +251,7 @@
               <option value="理科">🧪 理科</option>
               <option value="社会">🌍 社会</option>
               <option value="塾">🏫 塾</option>
+              <option value="Duolingo">🦉 Duolingo</option>
               <option value="その他">✏️ その他</option>
             </select>
             <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-4 text-cyan-400">
@@ -682,6 +683,7 @@
             <option value="理科">🧪 理科</option>
             <option value="社会">🌍 社会</option>
             <option value="塾">🏫 塾</option>
+            <option value="Duolingo">🦉 Duolingo</option>
             <option value="その他">✏️ その他</option>
           </select>
         </div>
@@ -2504,10 +2506,16 @@
     let pendingFriendRequests = [];
     let sentFriendRequests = [];
 
+    let isSendingFriendRequest = false;
+
     window.sendFriendRequest = async function() {
       if (!currentUser) return;
+      if (isSendingFriendRequest) return;
+
       const inputId = document.getElementById('friend-search-input').value.trim();
       if (!inputId) return;
+
+      isSendingFriendRequest = true;
 
       let targetUid = inputId;
       let targetDisplayName = '';
@@ -2526,52 +2534,63 @@
 
       if (targetUid === currentUser.uid) {
         showToast("自分に友達申請を送ることはできません。");
+        isSendingFriendRequest = false;
         return;
       }
 
-      // 2. 存在確認
-      const targetProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetUid);
-      const snap = await getDoc(targetProfileRef);
-      if (!snap.exists()) {
-        showToast("ユーザーが見つかりません。IDを確認してください。");
-        return;
+      try {
+        // 2. 存在確認
+        const targetProfileRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', targetUid);
+        const snap = await getDoc(targetProfileRef);
+        if (!snap.exists()) {
+          showToast("ユーザーが見つかりません。IDを確認してください。");
+          isSendingFriendRequest = false;
+          return;
+        }
+        const targetData = snap.data();
+
+        // 既に友達なら弾く
+        if (friendsIdList.includes(targetUid)) {
+          showToast("すでに友達に追加されています。");
+          isSendingFriendRequest = false;
+          return;
+        }
+
+        // 3. 重複申請チェック
+        const requestsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'friend_requests');
+        const dupQ = query(requestsColRef, where('fromUid', '==', currentUser.uid), where('toUid', '==', targetUid), where('status', '==', 'pending'));
+        const dupSnap = await getDocs(dupQ);
+        if (!dupSnap.empty) {
+          showToast("すでに申請済みです。承認を待っています。");
+          isSendingFriendRequest = false;
+          return;
+        }
+
+        // 4. 申請ドキュメントを作成
+        const myName = document.getElementById('user-display-name').textContent || 'GUEST';
+        const myEasyId = document.getElementById('profile-uid-text').value || '';
+        await addDoc(requestsColRef, {
+          fromUid: currentUser.uid,
+          fromName: myName,
+          fromEasyId: myEasyId,
+          toUid: targetUid,
+          toName: targetData.displayName || 'GUEST',
+          status: 'pending',
+          timestamp: Date.now()
+        });
+
+        // バックグラウンドプッシュ通知を送信（Vercel経由）
+        sendPushToUser(targetUid, '🤝 友達申請が届きました', `${myName}さんから友達申請が届いています！`);
+
+        logAdminAction("FRIEND_REQUEST", `${targetData.displayName || 'GUEST'} に友達申請を送りました`);
+        showToast(`📩 「${targetData.displayName || 'GUEST'}」に友達申請を送りました！`);
+        document.getElementById('friend-search-input').value = '';
+      } catch (err) {
+        console.error("Failed to send friend request: ", err);
+        showToast("友達申請の送信に失敗しました");
+      } finally {
+        isSendingFriendRequest = false;
       }
-      const targetData = snap.data();
-
-      // 既に友達なら弾く
-      if (friendsIdList.includes(targetUid)) {
-        showToast("すでに友達に追加されています。");
-        return;
-      }
-
-      // 3. 重複申請チェック
-      const requestsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'friend_requests');
-      const dupQ = query(requestsColRef, where('fromUid', '==', currentUser.uid), where('toUid', '==', targetUid), where('status', '==', 'pending'));
-      const dupSnap = await getDocs(dupQ);
-      if (!dupSnap.empty) {
-        showToast("すでに申請済みです。承認を待っています。");
-        return;
-      }
-
-      // 4. 申請ドキュメントを作成
-      const myName = document.getElementById('user-display-name').textContent || 'GUEST';
-      const myEasyId = document.getElementById('profile-uid-text').value || '';
-      await addDoc(requestsColRef, {
-        fromUid: currentUser.uid,
-        fromName: myName,
-        fromEasyId: myEasyId,
-        toUid: targetUid,
-        toName: targetData.displayName || 'GUEST',
-        status: 'pending',
-        timestamp: Date.now()
-      });
-
-      // バックグラウンドプッシュ通知を送信（Vercel経由）
-      sendPushToUser(targetUid, '🤝 友達申請が届きました', `${myName}さんから友達申請が届いています！`);
-
-      logAdminAction("FRIEND_REQUEST", `${targetData.displayName || 'GUEST'} に友達申請を送りました`);
-      showToast(`📩 「${targetData.displayName || 'GUEST'}」に友達申請を送りました！`);
-      document.getElementById('friend-search-input').value = '';
     };
 
     // 受信した申請を承認
