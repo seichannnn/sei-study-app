@@ -2452,7 +2452,7 @@
       }
     }
 
-    async function toggleBanUser(uid, currentlyBanned) {
+    window.toggleBanUser = async function(uid, currentlyBanned) {
       const newState = !currentlyBanned;
       const label = newState ? '利用停止' : '利用再開';
       if (!confirm(`このユーザーを${label}しますか？`)) return;
@@ -2465,9 +2465,9 @@
         console.error('toggleBanUser error:', err);
         showToast('操作に失敗しました。');
       }
-    }
+    };
 
-    async function triggerCronRemindManually() {
+    window.triggerCronRemindManually = async function() {
       if (!confirm('今日まだ勉強していない全ユーザーへ、即時プッシュ通知を送信します。よろしいですか？')) return;
       try {
         showToast('⏳ 送信中...');
@@ -2482,7 +2482,7 @@
         console.error('triggerCronRemindManually error:', err);
         showToast('送信に失敗しました。');
       }
-    }
+    };
 
     async function loadAdminLogs() {
       const container = document.getElementById('admin-logs-container');
