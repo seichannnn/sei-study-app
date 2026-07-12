@@ -538,6 +538,7 @@
                   <th class="py-2.5">メールアドレス</th>
                   <th class="py-2.5">登録日時</th>
                   <th class="py-2.5 text-right">総学習</th>
+                  <th class="py-2.5 text-right">操作</th>
                 </tr>
               </thead>
               <tbody id="admin-users-table-body" class="divide-y divide-white/5 font-medium text-slate-300">
@@ -566,6 +567,25 @@
               <button onclick="sendBroadcastPushNotification()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center space-x-1.5 shadow-neon-blue">
                 <i data-lucide="send" class="w-3.5 h-3.5"></i>
                 <span>全員にプッシュ通知を送信</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 勉強促進通知の手動送信 -->
+        <div class="glass-panel rounded-2xl p-5 shadow-glass space-y-4">
+          <h3 class="text-xs font-black tracking-wider text-slate-400 uppercase flex items-center space-x-2">
+            <i data-lucide="bell-ring" class="w-4 h-4 text-rose-400"></i>
+            <span>STUDY REMINDER / 勉強促進通知の手動実行</span>
+          </h3>
+          <div class="space-y-3">
+            <p class="text-[11px] text-slate-400 leading-relaxed">
+              毎日19時の自動送信と同じロジックで、今日まだ勉強していない全員に対し、即時プッシュ通知を送ります。既に本日勉強を完了しているユーザー、または利用停止されているアカウントには送信されません。
+            </p>
+            <div class="flex justify-end">
+              <button onclick="triggerCronRemindManually()" class="bg-rose-500 hover:bg-rose-400 text-slate-950 font-black px-5 py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center space-x-1.5 shadow-neon-blue">
+                <i data-lucide="bell" class="w-3.5 h-3.5"></i>
+                <span>未学習者へ促進通知を一斉送信</span>
               </button>
             </div>
           </div>
@@ -1192,6 +1212,12 @@
 
         if (snap.exists()) {
           const data = snap.data();
+          if (data.isBanned) {
+            showToast("⛔ このアカウントは利用停止されています。");
+            await signOut(auth);
+            setTimeout(() => { location.reload(); }, 1500);
+            return false;
+          }
           if (data.displayName) currentName = data.displayName;
           if (data.easyId) easyId = data.easyId;
           if (data.isProfileSetup) isProfileSetup = data.isProfileSetup;
@@ -1199,8 +1225,8 @@
           if (data.createdAt) createdAt = data.createdAt;
         }
 
-        // Googleログインで、名前設定がまだな場合はモーダル表示
-        if (!user.isAnonymous && !isProfileSetup) {
+        // ログイン手段に関わらず、名前設定がまだの場合はモーダル表示
+        if (!isProfileSetup) {
           openNameSetupModal(user);
           return false;
         }
@@ -2382,34 +2408,79 @@
 
     async function loadAdminUsers() {
       const tbody = document.getElementById('admin-users-table-body');
-      tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-500">読込中...</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-500">読込中...</td></tr>';
 
       const usersColRef = collection(db, 'artifacts', appId, 'public', 'data', 'users');
       try {
         const snap = await getDocs(usersColRef);
         tbody.innerHTML = '';
         if (snap.empty) {
-          tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-slate-500">ユーザーがいません</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-slate-500">ユーザーがいません</td></tr>';
           return;
         }
         snap.forEach(docSnap => {
           const d = docSnap.data();
+          const uid = docSnap.id;
           const tr = document.createElement('tr');
           const createdDate = d.createdAt ? new Date(d.createdAt).toLocaleString('ja-JP') : '不明';
+          const isBanned = !!d.isBanned;
+          const banBtnClass = isBanned
+            ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
+            : 'bg-rose-600 hover:bg-rose-500 text-white';
+          const banBtnLabel = isBanned ? '✅ 解除' : '⛔ 停止';
+          tr.dataset.uid = uid;
+          if (isBanned) tr.classList.add('opacity-50');
           tr.innerHTML = `
             <td class="py-2.5">
               <span class="text-slate-200 font-bold">${escapeHTML(d.displayName || 'GUEST')}</span>
-              <span class="block text-[9px] text-slate-500">${escapeHTML(d.easyId || d.uid || '')}</span>
+              <span class="block text-[9px] text-slate-500">${escapeHTML(d.easyId || uid || '')}</span>
+              ${isBanned ? '<span class="text-[9px] text-rose-400 font-bold">利用停止中</span>' : ''}
             </td>
             <td class="py-2.5 text-slate-400">${escapeHTML(d.email || 'N/A')}</td>
             <td class="py-2.5 text-slate-400">${createdDate}</td>
             <td class="py-2.5 text-right text-cyan-400 font-bold font-mono">${d.totalStudyMinutes || 0}分</td>
+            <td class="py-2.5 text-right">
+              <button class="${banBtnClass} font-bold px-3 py-1 rounded-lg text-[10px] transition active:scale-95"
+                onclick="toggleBanUser('${uid}', ${isBanned})">${banBtnLabel}</button>
+            </td>
           `;
           tbody.appendChild(tr);
         });
       } catch (err) {
         console.error("Failed to load admin users: ", err);
-        tbody.innerHTML = '<tr><td colspan="4" class="py-4 text-center text-rose-400">読込エラー</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="py-4 text-center text-rose-400">読込エラー</td></tr>';
+      }
+    }
+
+    async function toggleBanUser(uid, currentlyBanned) {
+      const newState = !currentlyBanned;
+      const label = newState ? '利用停止' : '利用再開';
+      if (!confirm(`このユーザーを${label}しますか？`)) return;
+      try {
+        const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'users', uid);
+        await updateDoc(userDocRef, { isBanned: newState });
+        showToast(`✅ ユーザーを${label}しました。`);
+        loadAdminUsers();
+      } catch (err) {
+        console.error('toggleBanUser error:', err);
+        showToast('操作に失敗しました。');
+      }
+    }
+
+    async function triggerCronRemindManually() {
+      if (!confirm('今日まだ勉強していない全ユーザーへ、即時プッシュ通知を送信します。よろしいですか？')) return;
+      try {
+        showToast('⏳ 送信中...');
+        const res = await fetch('https://notifications-api-wheat.vercel.app/api/cron-remind', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminTrigger: 'true' })
+        });
+        const json = await res.json();
+        showToast(`✅ 送信完了: ${json.sent ?? '?'}件送信`);
+      } catch (err) {
+        console.error('triggerCronRemindManually error:', err);
+        showToast('送信に失敗しました。');
       }
     }
 
@@ -3121,9 +3192,124 @@
       _originalStartRealtimeSync(user);
       startFriendRequestListeners(user);
       setupChatNotificationListener(user);
-      setupPushSubscription(user); // ログイン・起動時に自動的にPushSubscriptionを登録・更新
-      startNotificationListener(user); // アプリ内通知リスナー
+      setupPushSubscription(user);
+      startNotificationListener(user);
     };
+
+    // ── PWAインストールバナー ──────────────────────────────
+    (function initPwaBanner() {
+      // すでにPWA（スタンドアロン）で起動している場合は何もしない
+      if (window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true) return;
+
+      // iOSかどうか判定
+      const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+      const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+      // バナーを一度閉じたユーザーには再表示しない（セッション内のみ）
+      if (sessionStorage.getItem('pwa-banner-dismissed')) return;
+
+      let deferredPrompt = null;
+
+      // Chrome / Edge などの beforeinstallprompt をキャプチャ
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        showPwaBanner('chrome');
+      });
+
+      // iOS Safari向けには即時表示
+      if (isIos && isSafari) {
+        setTimeout(() => showPwaBanner('ios'), 1500);
+      }
+
+      function showPwaBanner(type) {
+        const existing = document.getElementById('pwa-install-banner');
+        if (existing) return;
+
+        const banner = document.createElement('div');
+        banner.id = 'pwa-install-banner';
+        banner.style.cssText = [
+          'position:fixed', 'bottom:0', 'left:0', 'right:0', 'z-index:9999',
+          'background:linear-gradient(135deg,#0f172a ee,#1e293b)',
+          'border-top:1px solid rgba(99,179,237,0.3)',
+          'padding:14px 16px', 'display:flex', 'align-items:center',
+          'gap:12px', 'box-shadow:0 -4px 24px rgba(0,0,0,0.5)',
+          'animation:slideUpBanner .35s cubic-bezier(.22,1,.36,1) both'
+        ].join(';');
+
+        // アニメーション用CSSを動的挿入
+        if (!document.getElementById('pwa-banner-style')) {
+          const st = document.createElement('style');
+          st.id = 'pwa-banner-style';
+          st.textContent = '@keyframes slideUpBanner{from{transform:translateY(100%);opacity:0}to{transform:translateY(0);opacity:1}}';
+          document.head.appendChild(st);
+        }
+
+        const icon = document.createElement('div');
+        icon.innerHTML = '📲';
+        icon.style.cssText = 'font-size:28px;flex-shrink:0';
+
+        const text = document.createElement('div');
+        text.style.cssText = 'flex:1;min-width:0';
+        const title = document.createElement('p');
+        title.style.cssText = 'margin:0;font-size:13px;font-weight:800;color:#e2e8f0;line-height:1.3';
+        title.textContent = 'ホーム画面に追加してみよう！';
+        const desc = document.createElement('p');
+        desc.style.cssText = 'margin:4px 0 0;font-size:11px;color:#94a3b8;line-height:1.4';
+        if (type === 'ios') {
+          desc.textContent = '下のメニューから「ホーム画面に追加」をタップ 🔖';
+        } else {
+          desc.textContent = 'アプリとしてインストールすると快適に使えます ✨';
+        }
+        text.appendChild(title);
+        text.appendChild(desc);
+
+        const actions = document.createElement('div');
+        actions.style.cssText = 'display:flex;gap:8px;flex-shrink:0';
+
+        if (type === 'chrome' && deferredPrompt) {
+          const installBtn = document.createElement('button');
+          installBtn.textContent = '追加';
+          installBtn.style.cssText = [
+            'background:#3b82f6', 'color:#fff', 'border:none', 'border-radius:10px',
+            'padding:8px 16px', 'font-size:12px', 'font-weight:800', 'cursor:pointer',
+            'white-space:nowrap', 'transition:background .2s'
+          ].join(';');
+          installBtn.onmouseover = () => { installBtn.style.background = '#2563eb'; };
+          installBtn.onmouseout = () => { installBtn.style.background = '#3b82f6'; };
+          installBtn.onclick = async () => {
+            deferredPrompt.prompt();
+            const { outcome } = await deferredPrompt.userChoice;
+            deferredPrompt = null;
+            banner.remove();
+            if (outcome === 'accepted') sessionStorage.setItem('pwa-banner-dismissed', '1');
+          };
+          actions.appendChild(installBtn);
+        }
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕';
+        closeBtn.style.cssText = [
+          'background:rgba(255,255,255,0.08)', 'color:#94a3b8', 'border:none',
+          'border-radius:8px', 'padding:8px 10px', 'font-size:12px',
+          'cursor:pointer', 'transition:background .2s'
+        ].join(';');
+        closeBtn.onclick = () => {
+          banner.style.animation = 'none';
+          banner.style.transform = 'translateY(100%)';
+          banner.style.opacity = '0';
+          banner.style.transition = 'transform .3s ease,opacity .3s ease';
+          setTimeout(() => banner.remove(), 300);
+          sessionStorage.setItem('pwa-banner-dismissed', '1');
+        };
+        actions.appendChild(closeBtn);
+
+        banner.appendChild(icon);
+        banner.appendChild(text);
+        banner.appendChild(actions);
+        document.body.appendChild(banner);
+      }
+    })();
 
   </script>
 </body>
