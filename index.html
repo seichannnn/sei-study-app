@@ -1753,7 +1753,7 @@
     });
 
     function syncSubjectDisplay() {
-      timerSubjectDisplay.textContent = subjectSelect.value;
+      if (timerSubjectDisplay) timerSubjectDisplay.textContent = timerSubject ? timerSubject.value : '';
     }
 
     window.switchTab = function(tabId) {
@@ -1795,16 +1795,21 @@
     };
 
     window.applySettingsToTimer = function() {
-      const studyMin = parseInt(document.getElementById('cfg-study-time').value) || 25;
-      const breakMin = parseInt(document.getElementById('cfg-break-time').value) || 5;
-      const goalHours = parseInt(document.getElementById('cfg-weekly-goal').value) || 10;
-      
+      const studyEl  = document.getElementById('cfg-study-time');
+      const breakEl  = document.getElementById('cfg-break-time');
+      const goalEl   = document.getElementById('cfg-weekly-goal');
+      const studyMin = parseInt(studyEl?.value)  || localState.settings?.studyTime  || 25;
+      const breakMin = parseInt(breakEl?.value)  || localState.settings?.breakTime  || 5;
+      const goalHours= parseInt(goalEl?.value)   || localState.settings?.weeklyGoal || 10;
+
       localState.settings = { studyTime: studyMin, breakTime: breakMin, weeklyGoal: goalHours };
       saveLocalState();
 
       if (!isRunning) {
         isStudyMode = true;
-        setTimerDuration(studyMin);
+        currentSeconds = studyMin * 60;
+        originalSeconds = currentSeconds;
+        updateTimerDisplay();
       }
     };
 
@@ -1818,28 +1823,32 @@
     function updateTimerDisplay() {
       const minutes = Math.floor(currentSeconds / 60);
       const seconds = currentSeconds % 60;
-      timerDisplay.textContent = 
-        `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-      
-      const maxOffset = 816.8;
-      const offset = maxOffset - (currentSeconds / originalSeconds) * maxOffset;
-      timerProgress.style.strokeDashoffset = offset;
-      
+      if (timerDisplay) {
+        timerDisplay.textContent =
+          `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+      }
+
+      if (timerProgress && originalSeconds > 0) {
+        const maxOffset = 816.8;
+        const offset = maxOffset - (currentSeconds / originalSeconds) * maxOffset;
+        timerProgress.style.strokeDashoffset = offset;
+      }
+
       const timerContainer = document.querySelector('.neon-glow-active');
       if (isStudyMode) {
-        timerMode.textContent = 'FOCUS TIME';
-        timerMode.className = 'text-[10px] tracking-[0.2em] uppercase text-cyan-400 font-black';
-        timerProgress.setAttribute('stroke', 'url(#neon-grad)');
-        if (timerContainer) {
-          timerContainer.style.filter = 'drop-shadow(0 0 15px rgba(56, 189, 248, 0.4))';
+        if (timerMode) {
+          timerMode.textContent = 'FOCUS TIME';
+          timerMode.className = 'text-[10px] tracking-[0.2em] uppercase text-cyan-400 font-black';
         }
+        if (timerProgress) timerProgress.setAttribute('stroke', 'url(#neon-grad)');
+        if (timerContainer) timerContainer.style.filter = 'drop-shadow(0 0 15px rgba(56, 189, 248, 0.4))';
       } else {
-        timerMode.textContent = 'REST TIME';
-        timerMode.className = 'text-[10px] tracking-[0.2em] uppercase text-emerald-400 font-black';
-        timerProgress.setAttribute('stroke', 'url(#break-grad)');
-        if (timerContainer) {
-          timerContainer.style.filter = 'drop-shadow(0 0 15px rgba(52, 211, 153, 0.4))';
+        if (timerMode) {
+          timerMode.textContent = 'REST TIME';
+          timerMode.className = 'text-[10px] tracking-[0.2em] uppercase text-emerald-400 font-black';
         }
+        if (timerProgress) timerProgress.setAttribute('stroke', 'url(#break-grad)');
+        if (timerContainer) timerContainer.style.filter = 'drop-shadow(0 0 15px rgba(52, 211, 153, 0.4))';
       }
     }
 
@@ -1889,12 +1898,12 @@
       if (isRunning) {
         clearInterval(timerInterval);
         isRunning = false;
-        playIcon.setAttribute('data-lucide', 'play');
+        if (playIcon) playIcon.setAttribute('data-lucide', 'play');
         releaseWakeLock();
         syncUserProfile(currentUser);
       } else {
         isRunning = true;
-        playIcon.setAttribute('data-lucide', 'pause');
+        if (playIcon) playIcon.setAttribute('data-lucide', 'pause');
         acquireWakeLock();
         _timerHiddenAt = null;
         timerInterval = setInterval(() => {
@@ -1907,15 +1916,14 @@
         }, 1000);
         syncUserProfile(currentUser);
       }
-      lucide.createIcons();
+      if (typeof lucide !== 'undefined') lucide.createIcons();
     };
 
     window.resetTimer = function() {
       clearInterval(timerInterval);
       isRunning = false;
-      playIcon.setAttribute('data-lucide', 'play');
-      lucide.createIcons();
-      
+      if (playIcon) playIcon.setAttribute('data-lucide', 'play');
+      if (typeof lucide !== 'undefined') lucide.createIcons();
       isStudyMode = true;
       currentSeconds = localState.settings.studyTime * 60;
       originalSeconds = currentSeconds;
@@ -1926,9 +1934,8 @@
     window.skipTimer = function() {
       clearInterval(timerInterval);
       isRunning = false;
-      playIcon.setAttribute('data-lucide', 'play');
-      lucide.createIcons();
-      
+      if (playIcon) playIcon.setAttribute('data-lucide', 'play');
+      if (typeof lucide !== 'undefined') lucide.createIcons();
       isStudyMode = !isStudyMode;
       currentSeconds = (isStudyMode ? localState.settings.studyTime : localState.settings.breakTime) * 60;
       originalSeconds = currentSeconds;
@@ -1941,8 +1948,8 @@
       clearInterval(timerInterval);
       isRunning = false;
       releaseWakeLock();
-      playIcon.setAttribute('data-lucide', 'play');
-      lucide.createIcons();
+      if (playIcon) playIcon.setAttribute('data-lucide', 'play');
+      if (typeof lucide !== 'undefined') lucide.createIcons();
       
       if (navigator.vibrate) {
         navigator.vibrate([300, 150, 300]);
