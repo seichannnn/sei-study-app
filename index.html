@@ -314,6 +314,66 @@
           <button onclick="setTimerDuration(50)" class="glass-panel py-3.5 rounded-xl text-xs font-semibold text-slate-300 hover:border-cyan-500/50 transition active:scale-95">50 MIN</button>
         </div>
 
+        <!-- 裏面タイマーボタン -->
+        <div class="flex justify-center">
+          <button onclick="startFaceDownMode()" class="flex items-center space-x-2 px-5 py-3 rounded-2xl bg-gradient-to-r from-violet-600/80 to-indigo-600/80 border border-violet-500/30 text-white text-xs font-black tracking-wide shadow-lg hover:brightness-110 active:scale-95 transition">
+            <span class="text-base">📱</span>
+            <span>裏面タイマーモードを開始する</span>
+          </button>
+        </div>
+
+      </div>
+
+      <!-- 裏面タイマーオーバーレイ -->
+      <div id="facedown-overlay" class="hidden fixed inset-0 z-[200] flex flex-col items-center justify-center bg-slate-950/95 backdrop-blur-md px-6" style="animation: none">
+        <!-- 待機画面: 説明 -->
+        <div id="facedown-idle" class="flex flex-col items-center text-center space-y-6">
+          <div class="text-7xl animate-bounce">📱</div>
+          <h2 class="text-2xl font-black text-white">裏面タイマーモード</h2>
+          <p class="text-slate-300 text-sm leading-relaxed max-w-xs">スマホを裏返しにするとタイマーがスタートします。表に屋にするとタイマーがストップし、記録に追加するか確認します。</p>
+          <div class="flex flex-col space-y-2 w-full max-w-xs">
+            <label class="text-xs text-slate-400 font-bold text-left">記録する科目</label>
+            <select id="facedown-subject" class="w-full glass-input rounded-xl px-4 py-3 text-sm text-slate-100 font-medium focus:outline-none">
+              <option value="英語">🇬🇧 英語</option>
+              <option value="数学">📐 数学</option>
+              <option value="国語">📚 国語</option>
+              <option value="理科">🧪 理科</option>
+              <option value="社会">🌍 社会</option>
+              <option value="塾">🏫 塾</option>
+              <option value="Duolingo">🦉 Duolingo</option>
+              <option value="その他">✏️ その他</option>
+            </select>
+          </div>
+          <button onclick="exitFaceDownMode()" class="mt-2 text-xs text-slate-500 hover:text-slate-300 underline transition">キャンセル</button>
+        </div>
+
+        <!-- 計測画面: 計測中 -->
+        <div id="facedown-running" class="hidden flex-col items-center text-center space-y-4">
+          <div class="relative w-52 h-52 flex items-center justify-center rounded-full border-4 border-violet-500/40 shadow-[0_0_40px_rgba(139,92,246,0.4)]">
+            <div class="absolute inset-0 rounded-full bg-violet-500/5 animate-pulse"></div>
+            <div class="text-center z-10">
+              <span class="block text-2xl mb-1">📱</span>
+              <span id="facedown-display" class="block text-5xl font-black font-mono text-violet-300 tracking-tighter">00:00</span>
+              <span class="block text-xs text-slate-400 mt-1">計測中...</span>
+            </div>
+          </div>
+          <p class="text-slate-400 text-sm">📱 裏面タイマー動作中</p>
+          <p class="text-slate-500 text-xs">表にすると停止します</p>
+          <button onclick="exitFaceDownMode()" class="mt-2 text-xs text-slate-500 hover:text-slate-300 underline transition">キャンセル</button>
+        </div>
+
+        <!-- 確認画面: 記録に追加するか -->
+        <div id="facedown-confirm" class="hidden flex-col items-center text-center space-y-5 w-full max-w-xs">
+          <div class="text-5xl">🎉</div>
+          <h2 class="text-xl font-black text-white">お疲れさまでした！</h2>
+          <p class="text-slate-300 text-sm">計測時間: <span id="facedown-result-time" class="text-violet-400 font-black">0分</span></p>
+          <p class="text-slate-400 text-sm">この時間をランキングの記録に追加しますか？</p>
+          <div class="flex space-x-3 w-full">
+            <button onclick="saveFaceDownRecord()" class="flex-1 py-3.5 rounded-2xl bg-gradient-to-r from-violet-500 to-indigo-500 text-white font-black text-sm active:scale-95 transition shadow-lg">✅ 記録に追加</button>
+            <button onclick="discardFaceDownRecord()" class="flex-1 py-3.5 rounded-2xl glass-panel text-slate-400 font-bold text-sm active:scale-95 transition">✖️ 捨てる</button>
+          </div>
+          <button onclick="resumeFaceDownTimer()" class="text-xs text-indigo-400 hover:text-indigo-300 underline transition">裏面にして計測を再開する</button>
+        </div>
       </div>
 
       <!-- ================= 2. 友達・チャットタブ ================= -->
@@ -1816,15 +1876,60 @@
       }
     }
 
+    // Wake Lock（スリープ防止）管理
+    let _wakeLock = null;
+    async function acquireWakeLock() {
+      if ('wakeLock' in navigator) {
+        try {
+          _wakeLock = await navigator.wakeLock.request('screen');
+          _wakeLock.addEventListener('release', () => { _wakeLock = null; });
+          console.log('[WakeLock] 取得成功');
+        } catch (e) {
+          console.warn('[WakeLock] 取得失敗:', e.message);
+        }
+      }
+    }
+    async function releaseWakeLock() {
+      if (_wakeLock) {
+        try { await _wakeLock.release(); } catch(e) {}
+        _wakeLock = null;
+        console.log('[WakeLock] 解放');
+      }
+    }
+
+    // バックグラウンド復帰時の時刻補正
+    let _timerHiddenAt = null;
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) {
+        if (isRunning) _timerHiddenAt = Date.now();
+      } else {
+        // 画面復帰時 — 裏にいた分だけ秒数を減らす
+        if (isRunning && _timerHiddenAt !== null) {
+          const elapsed = Math.floor((Date.now() - _timerHiddenAt) / 1000);
+          _timerHiddenAt = null;
+          currentSeconds = Math.max(0, currentSeconds - elapsed);
+          updateTimerDisplay();
+          if (currentSeconds === 0) timerFinished();
+        }
+        // 画面復帰時にWakeLockを再取得（iOS/Androidはフォアグラウンド復帰で自動解放されるため）
+        if (isRunning && 'wakeLock' in navigator && !_wakeLock) {
+          acquireWakeLock();
+        }
+      }
+    });
+
     window.toggleTimer = function() {
       if (isRunning) {
         clearInterval(timerInterval);
         isRunning = false;
         playIcon.setAttribute('data-lucide', 'play');
-        syncUserProfile(currentUser); // オンラインに停止を中継
+        releaseWakeLock();
+        syncUserProfile(currentUser);
       } else {
         isRunning = true;
         playIcon.setAttribute('data-lucide', 'pause');
+        acquireWakeLock();
+        _timerHiddenAt = null;
         timerInterval = setInterval(() => {
           if (currentSeconds > 0) {
             currentSeconds--;
@@ -1833,7 +1938,7 @@
             timerFinished();
           }
         }, 1000);
-        syncUserProfile(currentUser); // オンラインに開始を中継
+        syncUserProfile(currentUser);
       }
       lucide.createIcons();
     };
@@ -1868,6 +1973,7 @@
     function timerFinished() {
       clearInterval(timerInterval);
       isRunning = false;
+      releaseWakeLock();
       playIcon.setAttribute('data-lucide', 'play');
       lucide.createIcons();
       
@@ -2369,14 +2475,24 @@
         const snap = await getDocs(usersColRef);
         
         let allSubscriptions = [];
+        const inAppPromises = [];
         snap.forEach(userDoc => {
           const data = userDoc.data();
           const subs = data.pushSubscriptions || [];
           allSubscriptions = allSubscriptions.concat(subs);
+          // アプリ内通知を全ユーザーに作成
+          if (data.isProfileSetup && !data.isBanned) {
+            inAppPromises.push(createInAppNotification(userDoc.id, title, body));
+          }
         });
 
+        // アプリ内通知を一斉書き込み
+        await Promise.all(inAppPromises);
+
         if (allSubscriptions.length === 0) {
-          showToast("送信対象のプッシュ通知トークン（許可ユーザー）がありません。");
+          showToast("アプリ内通知は送信しました。プッシュ許可ユーザーはいませんでした。");
+          titleInput.value = '';
+          bodyInput.value = '';
           return;
         }
 
@@ -3309,6 +3425,172 @@
         banner.appendChild(actions);
         document.body.appendChild(banner);
       }
+    })();
+
+    // ============================================================
+    // 裏面タイマーモード
+    // ============================================================
+    (function initFaceDownTimer() {
+      let fdActive = false;          // モード有効中
+      let fdRunning = false;         // 計測中
+      let fdSeconds = 0;             // 累積秒数
+      let fdInterval = null;         // setInterval ID
+      let fdMotionHandler = null;    // DeviceMotionのハンドラ参照
+      let fdIsFaceDown = false;      // 現在裏面か
+      const Z_THRESHOLD = -6;        // 裏面判定の閾値（重力Z軸）
+      const STABLE_FRAMES = 8;       // 安定と判断するフレーム数
+      let fdZHistory = [];
+
+      // --- UI要素 ---
+      const overlay      = document.getElementById('facedown-overlay');
+      const paneIdle     = document.getElementById('facedown-idle');
+      const paneRunning  = document.getElementById('facedown-running');
+      const paneConfirm  = document.getElementById('facedown-confirm');
+      const display      = document.getElementById('facedown-display');
+      const resultTime   = document.getElementById('facedown-result-time');
+
+      function showPane(name) {
+        [paneIdle, paneRunning, paneConfirm].forEach(p => p.classList.add('hidden'));
+        const target = { idle: paneIdle, running: paneRunning, confirm: paneConfirm }[name];
+        if (target) {
+          target.classList.remove('hidden');
+          target.classList.add('flex');
+        }
+      }
+
+      function updateDisplay() {
+        const m = String(Math.floor(fdSeconds / 60)).padStart(2, '0');
+        const s = String(fdSeconds % 60).padStart(2, '0');
+        if (display) display.textContent = `${m}:${s}`;
+      }
+
+      function startCounting() {
+        if (fdInterval) return;
+        fdRunning = true;
+        fdInterval = setInterval(() => {
+          fdSeconds++;
+          updateDisplay();
+        }, 1000);
+      }
+
+      function stopCounting() {
+        if (fdInterval) {
+          clearInterval(fdInterval);
+          fdInterval = null;
+        }
+        fdRunning = false;
+      }
+
+      function handleMotion(e) {
+        const z = e.accelerationIncludingGravity?.z;
+        if (z === null || z === undefined) return;
+
+        fdZHistory.push(z);
+        if (fdZHistory.length > STABLE_FRAMES) fdZHistory.shift();
+        const avg = fdZHistory.reduce((a, b) => a + b, 0) / fdZHistory.length;
+
+        const isFaceDown = avg < Z_THRESHOLD;
+
+        if (isFaceDown && !fdIsFaceDown) {
+          // 表→裏: タイマー開始（確認画面が出ていたら閉じて再開）
+          fdIsFaceDown = true;
+          showPane('running');
+          startCounting();
+        } else if (!isFaceDown && fdIsFaceDown && fdRunning) {
+          // 裏→表: タイマー停止 → 確認画面
+          fdIsFaceDown = false;
+          stopCounting();
+          showConfirmPane();
+        }
+      }
+
+      function showConfirmPane() {
+        const totalMin = Math.floor(fdSeconds / 60);
+        const remSec   = fdSeconds % 60;
+        let label = '';
+        if (totalMin > 0 && remSec > 0) label = `${totalMin}分${remSec}秒`;
+        else if (totalMin > 0)          label = `${totalMin}分`;
+        else                            label = `${remSec}秒`;
+        if (resultTime) resultTime.textContent = label;
+        showPane('confirm');
+      }
+
+      function attachMotion() {
+        fdMotionHandler = handleMotion;
+        window.addEventListener('devicemotion', fdMotionHandler, { passive: true });
+      }
+      function detachMotion() {
+        if (fdMotionHandler) {
+          window.removeEventListener('devicemotion', fdMotionHandler);
+          fdMotionHandler = null;
+        }
+        fdZHistory = [];
+      }
+
+      // --- 公開API ---
+      window.startFaceDownMode = async function() {
+        // iOS 13+: DeviceMotion許可リクエスト
+        if (typeof DeviceMotionEvent !== 'undefined' &&
+            typeof DeviceMotionEvent.requestPermission === 'function') {
+          try {
+            const state = await DeviceMotionEvent.requestPermission();
+            if (state !== 'granted') {
+              showToast('モーションセンサーの許可が必要です');
+              return;
+            }
+          } catch (e) {
+            showToast('センサー許可の取得に失敗しました');
+            return;
+          }
+        } else if (typeof DeviceMotionEvent === 'undefined') {
+          showToast('このデバイスはモーションセンサー非対応です');
+          return;
+        }
+
+        // 科目をメインセレクトと同期
+        const mainSubject = document.getElementById('timer-subject')?.value || '英語';
+        const fdSubjectEl = document.getElementById('facedown-subject');
+        if (fdSubjectEl) fdSubjectEl.value = mainSubject;
+
+        fdActive = true;
+        fdSeconds = 0;
+        fdRunning = false;
+        fdIsFaceDown = false;
+        fdZHistory = [];
+        updateDisplay();
+
+        overlay.classList.remove('hidden');
+        showPane('idle');
+        attachMotion();
+      };
+
+      window.exitFaceDownMode = function() {
+        stopCounting();
+        detachMotion();
+        fdActive = false;
+        overlay.classList.add('hidden');
+        fdSeconds = 0;
+        fdIsFaceDown = false;
+      };
+
+      window.saveFaceDownRecord = function() {
+        const durationMin = Math.max(1, Math.round(fdSeconds / 60));
+        const subject = document.getElementById('facedown-subject')?.value || 'その他';
+        addRecord(subject, durationMin, '📱 裏面タイマー');
+        showToast(`✅ ${durationMin}分の学習を記録しました！`);
+        window.exitFaceDownMode();
+      };
+
+      window.discardFaceDownRecord = function() {
+        window.exitFaceDownMode();
+        showToast('記録を破棄しました');
+      };
+
+      window.resumeFaceDownTimer = function() {
+        // 確認画面から「裏面にして再開」→ 待機画面に戻す（裏面検出でまた開始）
+        fdIsFaceDown = false;
+        showPane('idle');
+      };
     })();
 
   </script>
